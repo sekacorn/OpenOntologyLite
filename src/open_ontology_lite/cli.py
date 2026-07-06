@@ -60,6 +60,17 @@ def _load(path: Path, debug: bool = False) -> Ontology:
         _fail(exc, debug=debug)
 
 
+def _require_valid(ontology: Ontology) -> None:
+    report = validate_ontology(ontology)
+    if report.errors:
+        first = report.errors[0]
+        typer.echo(
+            f"Cannot export invalid ontology: {first.code} {first.path}: {first.message}",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+
 @app.command()
 def version() -> None:
     """Show the OpenOntologyLite version."""
@@ -178,6 +189,7 @@ def export_json_schema(
     """Export deterministic JSON Schema."""
 
     ontology = _load(file, debug)
+    _require_valid(ontology)
     if entity and entity not in ontology.entities:
         typer.echo(f"Unknown entity: {entity}", err=True)
         raise typer.Exit(2)
@@ -199,10 +211,10 @@ def export_mermaid(
 ) -> None:
     """Export Mermaid source text."""
 
+    ontology = _load(file, debug)
+    _require_valid(ontology)
     _write(
-        mermaid_text(
-            _load(file, debug), detailed=detailed and not compact, include_actions=actions
-        ),
+        mermaid_text(ontology, detailed=detailed and not compact, include_actions=actions),
         output,
     )
 
@@ -223,6 +235,7 @@ def docs_cmd(
     """Generate deterministic Markdown documentation."""
 
     ontology = _load(file, debug)
+    _require_valid(ontology)
     _write(
         markdown_docs(
             ontology, validation=validate_ontology(ontology), include_timestamp=include_timestamp

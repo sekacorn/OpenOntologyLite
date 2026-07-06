@@ -113,7 +113,7 @@ OpenOntologyLite is designed to stand alone in the `0.1.0` alpha line while rema
 
 ## Security Model
 
-Ontology files are untrusted input. The package uses safe YAML loading, size and nesting limits, non-executing preconditions, deterministic serialization, and escaping for Markdown and Mermaid outputs. It does not resolve remote schema references or execute expressions.
+Ontology files are untrusted input. The package uses safe YAML loading, file-size, parsed-node, and nesting limits, non-executing preconditions, deterministic serialization, and escaping for Markdown and Mermaid outputs. CLI export commands validate ontologies before generating derived artifacts. OpenOntologyLite does not resolve remote schema references or execute expressions.
 
 ## Limitations
 

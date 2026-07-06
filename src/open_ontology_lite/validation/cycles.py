@@ -48,6 +48,8 @@ def find_cycles(ontology: Ontology) -> tuple[Cycle, ...]:
             if neighbor in visiting:
                 start = stack.index(neighbor)
                 cycle = (*stack[start:], neighbor)
+                # Normalize rotations so the same cycle discovered from a
+                # different start node is reported only once.
                 rotations = [cycle[i:-1] + cycle[:i] + (cycle[i],) for i in range(len(cycle) - 1)]
                 cycles.add(min(rotations))
             elif neighbor not in visited:

@@ -54,6 +54,8 @@ def _validate_identifier(value: str, path: str, label: str) -> list[ValidationIs
 def _validate_aliases(
     aliases: tuple[str, ...], path: str, label: str, *, permission: bool = False
 ) -> list[ValidationIssue]:
+    # Aliases participate in diff rename detection, so they need the same
+    # identifier discipline as primary names.
     issues: list[ValidationIssue] = []
     seen: set[str] = set()
     for index, alias in enumerate(aliases):
@@ -154,6 +156,8 @@ def validate_ontology(ontology: Ontology, *, strict_permissions: bool = True) ->
             )
         )
 
+    # Model construction already handled field types; this pass checks cross
+    # references and compatibility rules that require the full ontology.
     entity_names = set(ontology.entities)
     for entity_name, entity in ontology.entities.items():
         issues.extend(_validate_identifier(entity_name, f"entities.{entity_name}", "Entity"))

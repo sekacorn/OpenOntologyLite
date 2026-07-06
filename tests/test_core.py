@@ -12,7 +12,7 @@ from open_ontology_lite import (
     validate_ontology,
 )
 from open_ontology_lite.cli import app
-from open_ontology_lite.errors import OntologyLoadError, OntologyParseError
+from open_ontology_lite.errors import OntologyLoadError, OntologyParseError, UnsafeInputError
 from open_ontology_lite.exporters import json_schema_text, markdown_docs, mermaid_text
 from open_ontology_lite.loading.json_loader import load_raw as load_json_raw
 from open_ontology_lite.loading.yaml_loader import load_raw as load_yaml_raw
@@ -380,6 +380,7 @@ entities:
     assert '"format": "date-time"' in schema
     assert '"type": "array"' in schema
     assert '"$ref": "#/$defs/Other"' in schema
+    assert '"anyOf"' in schema
 
 
 def test_more_validation_limit_and_text_branches(tmp_path: Path) -> None:
@@ -432,3 +433,23 @@ def test_cli_error_paths_and_run_helper() -> None:
         app, ["validate", str(FIXTURES / "invalid" / "unknown_relationship_target.yaml")]
     )
     assert result.exit_code == 1
+
+
+def test_cli_exports_reject_invalid_ontology(tmp_path: Path) -> None:
+    invalid = str(FIXTURES / "invalid" / "unknown_relationship_target.yaml")
+    commands = [
+        ["export-json-schema", invalid, "--output", str(tmp_path / "schema.json")],
+        ["export-mermaid", invalid, "--output", str(tmp_path / "diagram.mmd")],
+        ["docs", invalid, "--output", str(tmp_path / "docs.md")],
+    ]
+    for command in commands:
+        result = runner.invoke(app, command)
+        assert result.exit_code == 1
+        assert "Cannot export invalid ontology" in result.stderr
+
+
+def test_loader_rejects_excessive_parsed_nodes(tmp_path: Path) -> None:
+    path = tmp_path / "too_many_nodes.json"
+    path.write_text('{"nodes":[' + ",".join("0" for _ in range(100_001)) + "]}", encoding="utf-8")
+    with pytest.raises(UnsafeInputError, match="parsed nodes"):
+        load_json_raw(path)

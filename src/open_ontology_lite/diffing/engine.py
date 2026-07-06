@@ -25,6 +25,8 @@ def _change(
 def _alias_renames(
     removed: set[str], added: set[str], aliases_by_new_name: dict[str, tuple[str, ...]]
 ) -> dict[str, str]:
+    # Treat a removed name as a rename only when a new declaration explicitly
+    # carries it as an alias; this keeps ordinary remove/add pairs conservative.
     renames: dict[str, str] = {}
     for new_name in sorted(added):
         for alias in aliases_by_new_name.get(new_name, ()):
@@ -40,6 +42,9 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
     changes: list[DiffChange] = []
     old_entities = set(old.entities)
     new_entities = set(new.entities)
+
+    # Entity aliases let maintainers document intentional renames while still
+    # surfacing migration work as potentially breaking.
     entity_renames = _alias_renames(
         old_entities - new_entities,
         new_entities - old_entities,
@@ -76,6 +81,8 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
     for entity in sorted(old_entities & new_entities):
         old_props = old.entities[entity].properties
         new_props = new.entities[entity].properties
+        # Property rename detection is scoped to an unchanged entity; entity
+        # rename migration is reported separately above.
         prop_renames = _alias_renames(
             set(old_props) - set(new_props),
             set(new_props) - set(old_props),
@@ -223,6 +230,8 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
 
     old_rels = {rel.name: rel for rel in old.relationships}
     new_rels = {rel.name: rel for rel in new.relationships}
+    # Relationships and actions are list-backed in the ontology model, so map
+    # them by stable name before comparing versions.
     relationship_renames = _alias_renames(
         set(old_rels) - set(new_rels),
         set(new_rels) - set(old_rels),
@@ -270,6 +279,8 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
 
     old_actions = {action.name: action for action in old.actions}
     new_actions = {action.name: action for action in new.actions}
+    # Action aliases prevent renamed contracts from being reported as removed
+    # and newly added, while preserving a migration warning for callers.
     action_renames = _alias_renames(
         set(old_actions) - set(new_actions),
         set(new_actions) - set(old_actions),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from typing import Any
 
 from open_ontology_lite.models import Ontology, PropertyDef
@@ -29,8 +30,11 @@ def _property_schema(prop: PropertyDef) -> dict[str, Any]:
             schema["format"] = "date-time"
         elif prop.type == "uuid":
             schema["format"] = "uuid"
-    if prop.nullable and "type" in schema:
-        schema["type"] = [schema["type"], "null"]
+    if prop.nullable:
+        if "$ref" in schema:
+            schema = {"anyOf": [schema, {"type": "null"}]}
+        elif "type" in schema:
+            schema["type"] = [schema["type"], "null"]
     if prop.description:
         schema["description"] = prop.description
     if prop.enum is not None:
@@ -50,6 +54,12 @@ def _property_schema(prop: PropertyDef) -> dict[str, Any]:
     if prop.default is not None:
         schema["default"] = prop.default
     return schema
+
+
+def _json_default(value: object) -> object:
+    if isinstance(value, Decimal):
+        return str(value)
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
 def entity_schema(ontology: Ontology, entity_name: str) -> dict[str, Any]:
@@ -95,4 +105,6 @@ def combined_schema(ontology: Ontology, entity: str | None = None) -> dict[str, 
 def json_schema_text(ontology: Ontology, entity: str | None = None) -> str:
     """Return deterministic JSON Schema text."""
 
-    return json.dumps(combined_schema(ontology, entity), sort_keys=True, indent=2) + "\n"
+    return json.dumps(
+        combined_schema(ontology, entity), sort_keys=True, indent=2, default=_json_default
+    ) + "\n"

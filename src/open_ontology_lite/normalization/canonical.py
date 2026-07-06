@@ -11,6 +11,8 @@ from open_ontology_lite.models import Ontology
 
 
 def _stable(value: Any) -> Any:
+    # Decimal is stringified so canonical JSON does not depend on float
+    # conversion or platform-specific representation details.
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, tuple | list):
@@ -24,6 +26,8 @@ def normalize_ontology(ontology: Ontology) -> dict[str, Any]:
     """Return a deterministic normalized representation."""
 
     data = ontology.model_dump(by_alias=True, exclude_none=True)
+    # Sort every map-like declaration by stable identifier; list-backed
+    # declarations are sorted below by their explicit names.
     data["entities"] = {
         entity_name: _stable(data["entities"][entity_name])
         for entity_name in sorted(data.get("entities", {}))

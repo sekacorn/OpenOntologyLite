@@ -11,10 +11,10 @@ OpenOntologyLite treats ontology files as untrusted input.
 | Threat | Risk | Mitigation | Remaining limitation |
 |---|---|---|---|
 | Malicious YAML payload | Object construction or code execution | Uses `yaml.safe_load` only | Parser bugs remain possible |
-| Oversized ontology file | Memory or CPU denial of service | File-size limit | Limit is fixed in alpha |
+| Oversized ontology file | Memory or CPU denial of service | File-size and parsed-node limits | Limits are fixed in alpha |
 | Recursive reference graph | Infinite recursion | Iterative-safe graph traversal and cycle reporting | Cycles may still confuse downstream tools |
 | Terminal escape injection | Misleading CLI output | Validation text is concise and stack traces are hidden by default | Terminal-specific rendering varies |
-| Mermaid injection | Diagram corruption | Labels are escaped and sanitized | Mermaid parser behavior may change |
+| Mermaid injection | Diagram corruption | CLI exports validate before rendering and labels are escaped | Mermaid parser behavior may change |
 | Markdown injection | Malformed docs | Table and control-sensitive characters are escaped | Markdown renderers differ |
 | Malicious regex pattern | Regex denial of service downstream | Patterns are not executed by OpenOntologyLite | Consumers must handle patterns safely |
 | Path traversal in output filename | Writing unexpected files | CLI writes only to explicitly supplied local paths | Caller controls path |
