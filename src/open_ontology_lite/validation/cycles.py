@@ -64,7 +64,7 @@ def find_cycles(ontology: Ontology) -> tuple[Cycle, ...]:
             path=cycle,
             classification="potentially_problematic" if len(cycle) == 2 else "informational",
             reason=(
-                "Relationship and reference cycles are allowed in 0.1.0a1 "
+                "Relationship and reference cycles are allowed in 0.1.0a2 "
                 "but may affect downstream tools."
             ),
         )

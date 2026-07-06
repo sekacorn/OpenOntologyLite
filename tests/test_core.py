@@ -206,6 +206,68 @@ def test_diff_classifies_breaking_changes() -> None:
     assert result.breaking_count >= 5
 
 
+def test_diff_uses_aliases_for_renames(tmp_path: Path) -> None:
+    old_path = tmp_path / "old.yaml"
+    new_path = tmp_path / "new.yaml"
+    old_path.write_text(
+        """
+schema_version: "1.0"
+ontology: {id: rename, name: Rename, version: "1", namespace: example.rename}
+entities:
+  Customer:
+    properties:
+      customer_id: {type: string, required: true}
+relationships:
+  - {name: customer_links_customer, from: Customer, to: Customer, cardinality: one_to_one}
+actions:
+  - {name: update_customer, subject: Customer}
+""",
+        encoding="utf-8",
+    )
+    new_path.write_text(
+        """
+schema_version: "1.0"
+ontology: {id: rename, name: Rename, version: "2", namespace: example.rename}
+entities:
+  Client:
+    aliases: [Customer]
+    properties:
+      client_id: {type: string, required: true, aliases: [customer_id]}
+relationships:
+  - name: client_links_client
+    aliases: [customer_links_customer]
+    from: Client
+    to: Client
+    cardinality: one_to_one
+actions:
+  - name: update_client
+    aliases: [update_customer]
+    subject: Client
+""",
+        encoding="utf-8",
+    )
+    result = diff_ontologies(load_ontology(old_path), load_ontology(new_path))
+    codes = {change.code for change in result.changes}
+    assert {"ENTITY_RENAMED", "RELATIONSHIP_RENAMED", "ACTION_RENAMED"} <= codes
+    assert "ENTITY_REMOVED" not in codes
+    assert "ACTION_REMOVED" not in codes
+
+
+def test_alias_validation() -> None:
+    ontology = load_ontology(EXAMPLES / "customer_support.yaml").model_copy(
+        update={
+            "entities": {
+                **load_ontology(EXAMPLES / "customer_support.yaml").entities,
+                "Bad": load_ontology(EXAMPLES / "customer_support.yaml")
+                .entities["Customer"]
+                .model_copy(update={"aliases": ("123Bad", "123Bad")}),
+            }
+        }
+    )
+    codes = {issue.code for issue in validate_ontology(ontology).issues}
+    assert {"ALIAS_INVALID", "ALIAS_DUPLICATE"} <= codes
+
+
 def test_public_api_normalize_returns_dict() -> None:
     ontology = load_ontology(EXAMPLES / "customer_support.yaml")
     normalized = normalize_ontology(ontology)
@@ -242,7 +304,7 @@ def test_cli_acceptance_commands(tmp_path: Path) -> None:
 def test_cli_json_modes_and_version() -> None:
     example = str(EXAMPLES / "customer_support.yaml")
     assert runner.invoke(app, ["--version"]).exit_code == 0
-    assert runner.invoke(app, ["version"]).output.strip() == "0.1.0a1"
+    assert runner.invoke(app, ["version"]).output.strip() == "0.1.0a2"
     assert '"ok": true' in runner.invoke(app, ["validate", example, "--json"]).output
     assert "canonical_digest" in runner.invoke(app, ["inspect", example, "--json"]).output
     assert runner.invoke(app, ["cycles", example, "--json"]).exit_code == 0

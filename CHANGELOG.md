@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0a2
+
+- Added optional `aliases` fields for entities, properties, relationships, and actions.
+- Added alias validation for stable ontology identifiers.
+- Added rename-aware diff classification for alias-backed entity, relationship, and action renames.
+- Added migration suggestions to diff changes.
+- Bumped package version to `0.1.0a2`.
+
 ## 0.1.0a1
 
 - Initial alpha implementation of OpenOntologyLite.

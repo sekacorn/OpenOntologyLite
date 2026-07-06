@@ -60,6 +60,7 @@ class PropertyDef(StrictModel):
     """A typed property, action input, or output definition."""
 
     type: PropertyType
+    aliases: tuple[str, ...] = ()
     required: bool = False
     nullable: bool = False
     description: str = ""
@@ -79,12 +80,18 @@ class PropertyDef(StrictModel):
     def _enum(cls, value: object) -> object:
         return None if value is None else _tuple_or_empty(value)
 
+    @field_validator("aliases", mode="before")
+    @classmethod
+    def _aliases(cls, value: object) -> object:
+        return _tuple_or_empty(value)
+
 
 class EntityDef(StrictModel):
     """An ontology entity."""
 
     id: str | None = None
     name: str | None = None
+    aliases: tuple[str, ...] = ()
     description: str = ""
     properties: dict[str, PropertyDef] = Field(default_factory=dict)
     tags: tuple[str, ...] = ()
@@ -95,11 +102,17 @@ class EntityDef(StrictModel):
     def _tags(cls, value: object) -> object:
         return _tuple_or_empty(value)
 
+    @field_validator("aliases", mode="before")
+    @classmethod
+    def _aliases(cls, value: object) -> object:
+        return _tuple_or_empty(value)
+
 
 class RelationshipDef(StrictModel):
     """A relationship between two entities."""
 
     name: str
+    aliases: tuple[str, ...] = ()
     from_: str = Field(alias="from")
     to: str
     cardinality: Cardinality
@@ -108,11 +121,17 @@ class RelationshipDef(StrictModel):
     required: bool = False
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("aliases", mode="before")
+    @classmethod
+    def _aliases(cls, value: object) -> object:
+        return _tuple_or_empty(value)
+
 
 class ActionDef(StrictModel):
     """A declarative action contract."""
 
     name: str
+    aliases: tuple[str, ...] = ()
     description: str = ""
     subject: str
     inputs: dict[str, PropertyDef] = Field(default_factory=dict)
@@ -123,7 +142,7 @@ class ActionDef(StrictModel):
     tags: tuple[str, ...] = ()
     metadata: dict[str, Any] = Field(default_factory=dict)
 
-    @field_validator("permissions", "preconditions", "tags", mode="before")
+    @field_validator("aliases", "permissions", "preconditions", "tags", mode="before")
     @classmethod
     def _tuple(cls, value: object) -> object:
         return _tuple_or_empty(value)

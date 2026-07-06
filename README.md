@@ -8,7 +8,7 @@ Ready for public alpha release preparation with documented limitations.
 
 ## Alpha Warning
 
-OpenOntologyLite is `0.1.0a1` alpha software. The format may evolve before stable 1.0, and diff classifications are conservative rule-based guidance rather than legal, operational, or authorization guarantees.
+OpenOntologyLite is `0.1.0a2` alpha software. The format may evolve before stable 1.0, and diff classifications are conservative rule-based guidance rather than legal, operational, or authorization guarantees.
 
 ## Why It Exists
 
@@ -109,7 +109,7 @@ The Mermaid command emits source text only. It does not require Mermaid to be in
 
 ## Ecosystem Position
 
-OpenOntologyLite is designed to stand alone in `0.1.0a1` while remaining friendly to later integrations with Forge, PrivateAIStack, ModelSwapBench, AgentPolicyPack, AIAuditLog, and OpenAIMeter.
+OpenOntologyLite is designed to stand alone in the `0.1.0` alpha line while remaining friendly to later integrations with Forge, PrivateAIStack, ModelSwapBench, AgentPolicyPack, AIAuditLog, and OpenAIMeter.
 
 ## Security Model
 
@@ -134,9 +134,9 @@ Ontology files are untrusted input. The package uses safe YAML loading, size and
 
 ## Roadmap
 
-`0.1.0a2`: aliases, rename tracking, migration hints, additional exporters, stronger resource-limit configuration.
+`0.1.0a2`: aliases, rename-aware diffing, and migration hints.
 
-`0.1.0a3`: Forge adapter, ModelSwapBench fixtures, PrivateAIStack RAG metadata, policy hooks for AgentPolicyPack.
+`0.1.0a3`: additional exporters, stronger resource-limit configuration, Forge adapter, ModelSwapBench fixtures, PrivateAIStack RAG metadata, policy hooks for AgentPolicyPack.
 
 `0.2`: optional SQLite catalog, ontology package imports, modular namespaces, signed manifests, provenance metadata.
 

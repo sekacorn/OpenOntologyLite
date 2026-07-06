@@ -51,6 +51,32 @@ def _validate_identifier(value: str, path: str, label: str) -> list[ValidationIs
     return []
 
 
+def _validate_aliases(
+    aliases: tuple[str, ...], path: str, label: str, *, permission: bool = False
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    seen: set[str] = set()
+    for index, alias in enumerate(aliases):
+        alias_path = f"{path}.aliases[{index}]"
+        if alias in seen:
+            issues.append(
+                _issue("ALIAS_DUPLICATE", f"{label} alias '{alias}' is duplicated.", alias_path)
+            )
+        seen.add(alias)
+        if permission:
+            if not is_permission_name(alias):
+                issues.append(
+                    _issue("ALIAS_INVALID", f"{label} alias '{alias}' is invalid.", alias_path)
+                )
+        elif not alias.strip():
+            issues.append(_issue("ALIAS_EMPTY", f"{label} alias is empty.", alias_path))
+        elif not is_identifier(alias):
+            issues.append(
+                _issue("ALIAS_INVALID", f"{label} alias '{alias}' is invalid.", alias_path)
+            )
+    return issues
+
+
 def _validate_property_references(
     prop: PropertyDef, path: str, entity_names: set[str]
 ) -> list[ValidationIssue]:
@@ -131,6 +157,7 @@ def validate_ontology(ontology: Ontology, *, strict_permissions: bool = True) ->
     entity_names = set(ontology.entities)
     for entity_name, entity in ontology.entities.items():
         issues.extend(_validate_identifier(entity_name, f"entities.{entity_name}", "Entity"))
+        issues.extend(_validate_aliases(entity.aliases, f"entities.{entity_name}", "Entity"))
         for prop_name, prop in entity.properties.items():
             issues.extend(
                 _validate_identifier(
@@ -142,6 +169,13 @@ def validate_ontology(ontology: Ontology, *, strict_permissions: bool = True) ->
                     prop,
                     f"entities.{entity_name}.properties.{prop_name}",
                     entity_names,
+                )
+            )
+            issues.extend(
+                _validate_aliases(
+                    prop.aliases,
+                    f"entities.{entity_name}.properties.{prop_name}",
+                    "Property",
                 )
             )
 
@@ -157,6 +191,7 @@ def validate_ontology(ontology: Ontology, *, strict_permissions: bool = True) ->
     for index, rel in enumerate(ontology.relationships):
         path = f"relationships[{index}]"
         issues.extend(_validate_identifier(rel.name, f"{path}.name", "Relationship"))
+        issues.extend(_validate_aliases(rel.aliases, path, "Relationship"))
         if rel.from_ not in entity_names:
             issues.append(
                 _issue(
@@ -183,6 +218,7 @@ def validate_ontology(ontology: Ontology, *, strict_permissions: bool = True) ->
     for index, action in enumerate(ontology.actions):
         path = f"actions[{index}]"
         issues.extend(_validate_identifier(action.name, f"{path}.name", "Action"))
+        issues.extend(_validate_aliases(action.aliases, path, "Action"))
         if action.subject not in entity_names:
             issues.append(
                 _issue(

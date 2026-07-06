@@ -16,6 +16,7 @@ class DiffChange(BaseModel):
     code: str
     path: str
     message: str
+    suggestion: str | None = None
 
 
 class DiffResult(BaseModel):

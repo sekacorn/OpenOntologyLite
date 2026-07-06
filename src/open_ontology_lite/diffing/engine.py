@@ -6,13 +6,32 @@ from open_ontology_lite.models import Ontology
 from open_ontology_lite.models.diff import DiffChange, DiffResult
 
 
-def _change(classification: str, code: str, path: str, message: str) -> DiffChange:
+def _change(
+    classification: str,
+    code: str,
+    path: str,
+    message: str,
+    suggestion: str | None = None,
+) -> DiffChange:
     return DiffChange(
         classification=classification,  # type: ignore[arg-type]
         code=code,
         path=path,
         message=message,
+        suggestion=suggestion,
     )
+
+
+def _alias_renames(
+    removed: set[str], added: set[str], aliases_by_new_name: dict[str, tuple[str, ...]]
+) -> dict[str, str]:
+    renames: dict[str, str] = {}
+    for new_name in sorted(added):
+        for alias in aliases_by_new_name.get(new_name, ()):
+            if alias in removed and alias not in renames:
+                renames[alias] = new_name
+                break
+    return renames
 
 
 def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
@@ -21,7 +40,22 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
     changes: list[DiffChange] = []
     old_entities = set(old.entities)
     new_entities = set(new.entities)
-    for entity in sorted(old_entities - new_entities):
+    entity_renames = _alias_renames(
+        old_entities - new_entities,
+        new_entities - old_entities,
+        {name: entity.aliases for name, entity in new.entities.items()},
+    )
+    for old_name, new_name in sorted(entity_renames.items()):
+        changes.append(
+            _change(
+                "potentially_breaking",
+                "ENTITY_RENAMED",
+                f"entities.{new_name}.aliases",
+                f"Entity '{old_name}' appears to have been renamed to '{new_name}'.",
+                "Keep the alias until downstream consumers migrate to the new entity name.",
+            )
+        )
+    for entity in sorted((old_entities - new_entities) - set(entity_renames)):
         changes.append(
             _change(
                 "breaking",
@@ -30,7 +64,7 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
                 f"Entity '{entity}' was removed.",
             )
         )
-    for entity in sorted(new_entities - old_entities):
+    for entity in sorted((new_entities - old_entities) - set(entity_renames.values())):
         changes.append(
             _change(
                 "non_breaking",
@@ -42,7 +76,22 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
     for entity in sorted(old_entities & new_entities):
         old_props = old.entities[entity].properties
         new_props = new.entities[entity].properties
-        for prop in sorted(set(old_props) - set(new_props)):
+        prop_renames = _alias_renames(
+            set(old_props) - set(new_props),
+            set(new_props) - set(old_props),
+            {name: prop.aliases for name, prop in new_props.items()},
+        )
+        for old_name, new_name in sorted(prop_renames.items()):
+            changes.append(
+                _change(
+                    "potentially_breaking",
+                    "PROPERTY_RENAMED",
+                    f"entities.{entity}.properties.{new_name}.aliases",
+                    f"Property '{old_name}' appears to have been renamed to '{new_name}'.",
+                    "Keep the alias until readers and writers use the new property name.",
+                )
+            )
+        for prop in sorted((set(old_props) - set(new_props)) - set(prop_renames)):
             classification = "breaking" if old_props[prop].required else "potentially_breaking"
             changes.append(
                 _change(
@@ -52,7 +101,7 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
                     f"Property '{prop}' was removed from '{entity}'.",
                 )
             )
-        for prop in sorted(set(new_props) - set(old_props)):
+        for prop in sorted((set(new_props) - set(old_props)) - set(prop_renames.values())):
             new_prop = new_props[prop]
             if new_prop.required and new_prop.default is None:
                 changes.append(
@@ -174,7 +223,22 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
 
     old_rels = {rel.name: rel for rel in old.relationships}
     new_rels = {rel.name: rel for rel in new.relationships}
-    for name in sorted(set(old_rels) - set(new_rels)):
+    relationship_renames = _alias_renames(
+        set(old_rels) - set(new_rels),
+        set(new_rels) - set(old_rels),
+        {name: rel.aliases for name, rel in new_rels.items()},
+    )
+    for old_name, new_name in sorted(relationship_renames.items()):
+        changes.append(
+            _change(
+                "potentially_breaking",
+                "RELATIONSHIP_RENAMED",
+                f"relationships.{new_name}.aliases",
+                f"Relationship '{old_name}' appears to have been renamed to '{new_name}'.",
+                "Keep the alias until relationship consumers migrate to the new name.",
+            )
+        )
+    for name in sorted((set(old_rels) - set(new_rels)) - set(relationship_renames)):
         classification = "breaking" if old_rels[name].required else "potentially_breaking"
         changes.append(
             _change(
@@ -206,13 +270,28 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
 
     old_actions = {action.name: action for action in old.actions}
     new_actions = {action.name: action for action in new.actions}
-    for name in sorted(set(old_actions) - set(new_actions)):
+    action_renames = _alias_renames(
+        set(old_actions) - set(new_actions),
+        set(new_actions) - set(old_actions),
+        {name: action.aliases for name, action in new_actions.items()},
+    )
+    for old_name, new_name in sorted(action_renames.items()):
+        changes.append(
+            _change(
+                "potentially_breaking",
+                "ACTION_RENAMED",
+                f"actions.{new_name}.aliases",
+                f"Action '{old_name}' appears to have been renamed to '{new_name}'.",
+                "Keep the alias until callers migrate to the new action name.",
+            )
+        )
+    for name in sorted((set(old_actions) - set(new_actions)) - set(action_renames)):
         changes.append(
             _change(
                 "breaking", "ACTION_REMOVED", f"actions.{name}", f"Action '{name}' was removed."
             )
         )
-    for name in sorted(set(new_actions) - set(old_actions)):
+    for name in sorted((set(new_actions) - set(old_actions)) - set(action_renames.values())):
         changes.append(
             _change(
                 "non_breaking", "ACTION_ADDED", f"actions.{name}", f"Action '{name}' was added."
