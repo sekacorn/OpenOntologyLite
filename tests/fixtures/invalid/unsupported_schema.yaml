@@ -1,0 +1,4 @@
+schema_version: "9.0"
+ontology: {id: bad, name: Bad, version: "1", namespace: example.bad}
+entities:
+  Thing: {properties: {id: {type: string, required: true}}}

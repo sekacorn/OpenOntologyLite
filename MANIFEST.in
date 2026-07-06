@@ -1,0 +1,4 @@
+include README.md LICENSE SECURITY.md CONTRIBUTING.md CODE_OF_CONDUCT.md CHANGELOG.md
+recursive-include src/open_ontology_lite py.typed
+recursive-include examples *.yaml *.json
+recursive-include docs *.md

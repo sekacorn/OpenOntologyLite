@@ -1,0 +1,8 @@
+schema_version: "1.0"
+ontology: {id: bad, name: Bad, version: "1", namespace: example.bad}
+entities:
+  Customer:
+    properties:
+      customer_id: {type: string, required: true}
+relationships:
+  - {name: customer_has_invoice, from: Customer, to: Invoice, cardinality: one_to_many}

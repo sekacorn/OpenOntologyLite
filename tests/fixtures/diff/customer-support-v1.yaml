@@ -1,0 +1,17 @@
+schema_version: "1.0"
+ontology: {id: customer-service, name: Customer Service Ontology, version: "1.0.0", namespace: example.customer_service}
+entities:
+  Customer:
+    properties:
+      customer_id: {type: string, required: true}
+      account_status: {type: string, required: true, enum: [active, suspended, closed]}
+  Invoice:
+    properties:
+      invoice_id: {type: string, required: true}
+      amount: {type: decimal, required: true, minimum: 0}
+relationships:
+  - {name: customer_has_invoices, from: Customer, to: Invoice, cardinality: one_to_many, required: true}
+permissions:
+  billing.refund: {risk: high}
+actions:
+  - {name: issue_refund, subject: Invoice, inputs: {amount: {type: decimal, required: true}}, permissions: [billing.refund]}

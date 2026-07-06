@@ -1,0 +1,46 @@
+schema_version: "1.0"
+ontology:
+  id: public-benefits
+  name: Public Benefits Ontology
+  version: "1.0.0"
+  namespace: example.public_benefits
+  description: Generic public benefits workflow concepts.
+entities:
+  Applicant:
+    properties:
+      applicant_id: {type: string, required: true}
+      preferred_language: {type: string}
+  Application:
+    properties:
+      application_id: {type: string, required: true}
+      status: {type: string, required: true, enum: [draft, submitted, under_review, approved, denied]}
+      applicant: {type: reference, target: Applicant}
+  Program:
+    properties:
+      program_id: {type: string, required: true}
+      name: {type: string, required: true}
+  EligibilityDecision:
+    properties:
+      decision_id: {type: string, required: true}
+      result: {type: string, required: true, enum: [eligible, ineligible, needs_information]}
+  CaseWorker:
+    properties:
+      worker_id: {type: string, required: true}
+  Document:
+    properties:
+      document_id: {type: string, required: true}
+      document_type: {type: string, required: true}
+relationships:
+  - {name: applicant_submits_application, from: Applicant, to: Application, cardinality: one_to_many}
+  - {name: application_targets_program, from: Application, to: Program, cardinality: many_to_one}
+  - {name: application_has_documents, from: Application, to: Document, cardinality: one_to_many}
+permissions:
+  benefits.application.submit: {risk: low}
+  benefits.document.verify: {risk: medium}
+  benefits.eligibility.determine: {risk: high}
+  benefits.approve: {risk: critical}
+actions:
+  - {name: submit_application, subject: Application, permissions: [benefits.application.submit]}
+  - {name: verify_document, subject: Document, permissions: [benefits.document.verify]}
+  - {name: determine_eligibility, subject: Application, output: {type: reference, target: EligibilityDecision}, permissions: [benefits.eligibility.determine]}
+  - {name: approve_benefit, subject: Application, permissions: [benefits.approve], preconditions: [application.status == "under_review"]}

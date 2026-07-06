@@ -1,0 +1,6 @@
+schema_version: "1.0"
+ontology: {id: bad, name: Bad, version: "1", namespace: example.bad}
+entities:
+  Thing: {properties: {id: {type: string, required: true}}}
+actions:
+  - {name: do_it, subject: Thing, preconditions: [""]}

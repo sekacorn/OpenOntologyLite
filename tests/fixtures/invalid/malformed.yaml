@@ -1,0 +1,10 @@
+schema_version: "1.0"
+ontology:
+  id: bad
+  name: Bad
+  version: "1"
+  namespace: example.bad
+entities:
+  Broken:
+    properties:
+      field: [unterminated

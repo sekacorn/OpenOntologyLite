@@ -1,0 +1,85 @@
+schema_version: "1.0"
+ontology:
+  id: customer-service
+  name: Customer Service Ontology
+  version: "1.0.0"
+  namespace: example.customer_service
+  description: Operational concepts for customer service workflows.
+  tags: [support, billing]
+entities:
+  Agent:
+    description: A staff member or agent handling customer work.
+    properties:
+      agent_id: {type: uuid, required: true}
+      display_name: {type: string, required: true, min_length: 1}
+  Customer:
+    description: A person or organization receiving services.
+    properties:
+      customer_id: {type: string, required: true}
+      account_status: {type: string, required: true, enum: [active, suspended, closed], default: active}
+      created_at: {type: datetime}
+  Invoice:
+    description: A bill issued to a customer.
+    properties:
+      invoice_id: {type: string, required: true}
+      amount: {type: decimal, required: true, minimum: 0}
+      status: {type: string, required: true, enum: [draft, issued, paid, void]}
+      customer: {type: reference, target: Customer}
+  Refund:
+    description: A refund issued for an invoice.
+    properties:
+      refund_id: {type: string, required: true}
+      amount: {type: decimal, required: true, minimum: 0}
+      invoice: {type: reference, target: Invoice}
+  SupportTicket:
+    description: A customer support request.
+    properties:
+      ticket_id: {type: string, required: true}
+      status: {type: string, required: true, enum: [open, assigned, closed], default: open}
+      customer: {type: reference, target: Customer}
+relationships:
+  - name: customer_has_invoices
+    from: Customer
+    to: Invoice
+    cardinality: one_to_many
+  - name: customer_opens_tickets
+    from: Customer
+    to: SupportTicket
+    cardinality: one_to_many
+  - name: agent_handles_ticket
+    from: Agent
+    to: SupportTicket
+    cardinality: one_to_many
+permissions:
+  support.ticket.create: {description: Allows ticket creation., risk: low}
+  support.ticket.assign: {description: Allows assigning tickets., risk: medium}
+  support.ticket.close: {description: Allows closing tickets., risk: medium}
+  billing.refund: {description: Allows issuing refunds., risk: high}
+actions:
+  - name: create_ticket
+    description: Creates a support ticket.
+    subject: SupportTicket
+    inputs:
+      customer_id: {type: string, required: true}
+      description: {type: string, required: true, min_length: 1}
+    permissions: [support.ticket.create]
+  - name: assign_ticket
+    subject: SupportTicket
+    inputs:
+      agent_id: {type: uuid, required: true}
+    permissions: [support.ticket.assign]
+  - name: close_ticket
+    subject: SupportTicket
+    permissions: [support.ticket.close]
+    preconditions: [ticket.status != "closed"]
+  - name: issue_refund
+    description: Issues a refund for a paid invoice.
+    subject: Invoice
+    inputs:
+      reason: {type: string, required: true}
+      amount: {type: decimal, required: true, minimum: 0}
+    output: {type: reference, target: Refund}
+    permissions: [billing.refund]
+    preconditions:
+      - invoice.status == "paid"
+      - amount <= invoice.amount

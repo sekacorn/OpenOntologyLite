@@ -1,0 +1,305 @@
+"""Ontology diff engine."""
+
+from __future__ import annotations
+
+from open_ontology_lite.models import Ontology
+from open_ontology_lite.models.diff import DiffChange, DiffResult
+
+
+def _change(classification: str, code: str, path: str, message: str) -> DiffChange:
+    return DiffChange(
+        classification=classification,  # type: ignore[arg-type]
+        code=code,
+        path=path,
+        message=message,
+    )
+
+
+def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
+    """Compare two ontologies using conservative rule-based classification."""
+
+    changes: list[DiffChange] = []
+    old_entities = set(old.entities)
+    new_entities = set(new.entities)
+    for entity in sorted(old_entities - new_entities):
+        changes.append(
+            _change(
+                "breaking",
+                "ENTITY_REMOVED",
+                f"entities.{entity}",
+                f"Entity '{entity}' was removed.",
+            )
+        )
+    for entity in sorted(new_entities - old_entities):
+        changes.append(
+            _change(
+                "non_breaking",
+                "ENTITY_ADDED",
+                f"entities.{entity}",
+                f"Entity '{entity}' was added.",
+            )
+        )
+    for entity in sorted(old_entities & new_entities):
+        old_props = old.entities[entity].properties
+        new_props = new.entities[entity].properties
+        for prop in sorted(set(old_props) - set(new_props)):
+            classification = "breaking" if old_props[prop].required else "potentially_breaking"
+            changes.append(
+                _change(
+                    classification,
+                    "PROPERTY_REMOVED",
+                    f"entities.{entity}.properties.{prop}",
+                    f"Property '{prop}' was removed from '{entity}'.",
+                )
+            )
+        for prop in sorted(set(new_props) - set(old_props)):
+            new_prop = new_props[prop]
+            if new_prop.required and new_prop.default is None:
+                changes.append(
+                    _change(
+                        "breaking",
+                        "REQUIRED_PROPERTY_ADDED",
+                        f"entities.{entity}.properties.{prop}",
+                        f"Required property '{prop}' was added without a default.",
+                    )
+                )
+            elif new_prop.required:
+                changes.append(
+                    _change(
+                        "potentially_breaking",
+                        "REQUIRED_PROPERTY_ADDED_WITH_DEFAULT",
+                        f"entities.{entity}.properties.{prop}",
+                        f"Required property '{prop}' was added with a default.",
+                    )
+                )
+            else:
+                changes.append(
+                    _change(
+                        "non_breaking",
+                        "OPTIONAL_PROPERTY_ADDED",
+                        f"entities.{entity}.properties.{prop}",
+                        f"Optional property '{prop}' was added.",
+                    )
+                )
+        for prop in sorted(set(old_props) & set(new_props)):
+            old_prop = old_props[prop]
+            new_prop = new_props[prop]
+            path = f"entities.{entity}.properties.{prop}"
+            if old_prop.type != new_prop.type:
+                changes.append(
+                    _change(
+                        "breaking",
+                        "PROPERTY_TYPE_CHANGED",
+                        path,
+                        f"Property '{prop}' changed type from {old_prop.type} to {new_prop.type}.",
+                    )
+                )
+            if old_prop.enum is not None and new_prop.enum is not None:
+                removed = set(old_prop.enum) - set(new_prop.enum)
+                added = set(new_prop.enum) - set(old_prop.enum)
+                if removed:
+                    changes.append(
+                        _change(
+                            "breaking",
+                            "ENUM_VALUE_REMOVED",
+                            path,
+                            f"Enum values removed from '{prop}': {sorted(removed)}.",
+                        )
+                    )
+                if added:
+                    changes.append(
+                        _change(
+                            "non_breaking",
+                            "ENUM_VALUE_ADDED",
+                            path,
+                            f"Enum values added to '{prop}': {sorted(added)}.",
+                        )
+                    )
+            if old_prop.required is False and new_prop.required is True:
+                classification = (
+                    "potentially_breaking" if new_prop.default is not None else "breaking"
+                )
+                changes.append(
+                    _change(
+                        classification,
+                        "PROPERTY_BECAME_REQUIRED",
+                        path,
+                        f"Property '{prop}' became required.",
+                    )
+                )
+            if (
+                old_prop.minimum is not None
+                and new_prop.minimum is not None
+                and new_prop.minimum > old_prop.minimum
+            ):
+                changes.append(
+                    _change(
+                        "potentially_breaking",
+                        "NUMERIC_LIMIT_STRICTER",
+                        path,
+                        f"Minimum for '{prop}' became stricter.",
+                    )
+                )
+            if (
+                old_prop.maximum is not None
+                and new_prop.maximum is not None
+                and new_prop.maximum < old_prop.maximum
+            ):
+                changes.append(
+                    _change(
+                        "potentially_breaking",
+                        "NUMERIC_LIMIT_STRICTER",
+                        path,
+                        f"Maximum for '{prop}' became stricter.",
+                    )
+                )
+            if old_prop.pattern != new_prop.pattern and old_prop.pattern is not None:
+                changes.append(
+                    _change(
+                        "potentially_breaking",
+                        "PATTERN_CHANGED",
+                        path,
+                        f"Pattern for '{prop}' changed.",
+                    )
+                )
+            if old_prop.description != new_prop.description:
+                changes.append(
+                    _change(
+                        "non_breaking",
+                        "DESCRIPTION_CHANGED",
+                        path,
+                        f"Description for '{prop}' changed.",
+                    )
+                )
+
+    old_rels = {rel.name: rel for rel in old.relationships}
+    new_rels = {rel.name: rel for rel in new.relationships}
+    for name in sorted(set(old_rels) - set(new_rels)):
+        classification = "breaking" if old_rels[name].required else "potentially_breaking"
+        changes.append(
+            _change(
+                classification,
+                "RELATIONSHIP_REMOVED",
+                f"relationships.{name}",
+                f"Relationship '{name}' was removed.",
+            )
+        )
+    for name in sorted(set(old_rels) & set(new_rels)):
+        if old_rels[name].to != new_rels[name].to:
+            changes.append(
+                _change(
+                    "breaking",
+                    "RELATIONSHIP_TARGET_CHANGED",
+                    f"relationships.{name}.to",
+                    f"Relationship '{name}' target changed.",
+                )
+            )
+        if old_rels[name].cardinality != new_rels[name].cardinality:
+            changes.append(
+                _change(
+                    "breaking",
+                    "CARDINALITY_CHANGED",
+                    f"relationships.{name}.cardinality",
+                    f"Relationship '{name}' cardinality changed.",
+                )
+            )
+
+    old_actions = {action.name: action for action in old.actions}
+    new_actions = {action.name: action for action in new.actions}
+    for name in sorted(set(old_actions) - set(new_actions)):
+        changes.append(
+            _change(
+                "breaking", "ACTION_REMOVED", f"actions.{name}", f"Action '{name}' was removed."
+            )
+        )
+    for name in sorted(set(new_actions) - set(old_actions)):
+        changes.append(
+            _change(
+                "non_breaking", "ACTION_ADDED", f"actions.{name}", f"Action '{name}' was added."
+            )
+        )
+    for name in sorted(set(old_actions) & set(new_actions)):
+        old_action = old_actions[name]
+        new_action = new_actions[name]
+        for input_name in sorted(set(new_action.inputs) - set(old_action.inputs)):
+            new_input = new_action.inputs[input_name]
+            classification = (
+                "breaking" if new_input.required and new_input.default is None else "non_breaking"
+            )
+            code = (
+                "REQUIRED_ACTION_INPUT_ADDED"
+                if classification == "breaking"
+                else "OPTIONAL_ACTION_INPUT_ADDED"
+            )
+            changes.append(
+                _change(
+                    classification,
+                    code,
+                    f"actions.{name}.inputs.{input_name}",
+                    f"Action input '{input_name}' was added to '{name}'.",
+                )
+            )
+        if set(new_action.permissions) - set(old_action.permissions):
+            changes.append(
+                _change(
+                    "potentially_breaking",
+                    "ACTION_PERMISSION_STRICTER",
+                    f"actions.{name}.permissions",
+                    f"Action '{name}' requires additional permissions.",
+                )
+            )
+        if old_action.preconditions != new_action.preconditions:
+            changes.append(
+                _change(
+                    "potentially_breaking",
+                    "ACTION_PRECONDITIONS_CHANGED",
+                    f"actions.{name}.preconditions",
+                    f"Action '{name}' preconditions changed.",
+                )
+            )
+
+    old_permissions = set(old.permissions)
+    new_permissions = set(new.permissions)
+    referenced_old = {perm for action in old.actions for perm in action.permissions}
+    for permission in sorted(old_permissions - new_permissions):
+        classification = "breaking" if permission in referenced_old else "potentially_breaking"
+        changes.append(
+            _change(
+                classification,
+                "PERMISSION_REMOVED",
+                f"permissions.{permission}",
+                f"Permission '{permission}' was removed.",
+            )
+        )
+    for permission in sorted(new_permissions - old_permissions):
+        changes.append(
+            _change(
+                "non_breaking",
+                "PERMISSION_ADDED",
+                f"permissions.{permission}",
+                f"Permission '{permission}' was added.",
+            )
+        )
+    if old.ontology.description != new.ontology.description or old.metadata != new.metadata:
+        changes.append(
+            _change("informational", "METADATA_CHANGED", "ontology", "Ontology metadata changed.")
+        )
+    return DiffResult(
+        changes=tuple(sorted(changes, key=lambda item: (item.classification, item.code, item.path)))
+    )
+
+
+def diff_text(result: DiffResult) -> str:
+    """Return human-readable deterministic diff output."""
+
+    lines = [
+        "Ontology diff",
+        f"Breaking: {result.breaking_count}",
+        f"Potentially breaking: {result.potentially_breaking_count}",
+        f"Non-breaking: {result.non_breaking_count}",
+        f"Informational: {result.informational_count}",
+        "",
+    ]
+    for change in result.changes:
+        lines.append(f"[{change.classification}] {change.code} {change.path}: {change.message}")
+    return "\n".join(lines).rstrip() + "\n"

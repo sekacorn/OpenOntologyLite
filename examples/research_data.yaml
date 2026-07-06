@@ -1,0 +1,47 @@
+schema_version: "1.0"
+ontology:
+  id: research-data
+  name: Research Data Ontology
+  version: "1.0.0"
+  namespace: example.research_data
+  description: Operational concepts for research data governance.
+entities:
+  ResearchProject:
+    properties:
+      project_id: {type: string, required: true}
+      title: {type: string, required: true}
+  Dataset:
+    properties:
+      dataset_id: {type: string, required: true}
+      classification: {type: string, required: true, enum: [public, restricted, sensitive]}
+      project: {type: reference, target: ResearchProject}
+  Researcher:
+    properties:
+      researcher_id: {type: string, required: true}
+  ConsentRecord:
+    properties:
+      consent_id: {type: string, required: true}
+      valid_until: {type: date}
+  AnalysisRun:
+    properties:
+      run_id: {type: string, required: true}
+      started_at: {type: datetime}
+      dataset: {type: reference, target: Dataset}
+  Publication:
+    properties:
+      publication_id: {type: string, required: true}
+      doi: {type: string}
+relationships:
+  - {name: project_has_datasets, from: ResearchProject, to: Dataset, cardinality: one_to_many}
+  - {name: researcher_runs_analysis, from: Researcher, to: AnalysisRun, cardinality: one_to_many}
+  - {name: analysis_produces_publication, from: AnalysisRun, to: Publication, cardinality: one_to_many}
+permissions:
+  research.dataset.register: {risk: medium}
+  research.access.approve: {risk: high}
+  research.analysis.start: {risk: high}
+  research.result.publish: {risk: high}
+actions:
+  - {name: register_dataset, subject: Dataset, permissions: [research.dataset.register]}
+  - {name: approve_access, subject: Dataset, permissions: [research.access.approve], preconditions: [dataset.classification != "sensitive" or consent.valid == true]}
+  - {name: start_analysis, subject: AnalysisRun, permissions: [research.analysis.start]}
+  - {name: publish_result, subject: Publication, permissions: [research.result.publish]}
