@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Repository maintenance: consolidated git commit authorship under a single maintainer identity (`sekacorn`).
+
 ## 0.1.0a2
 
 - Added optional `aliases` fields for entities, properties, relationships, and actions.
