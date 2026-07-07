@@ -134,11 +134,33 @@ Ontology files are untrusted input. The package uses safe YAML loading, file-siz
 
 ## Roadmap
 
-`0.1.0a2`: aliases, rename-aware diffing, and migration hints.
+Current alpha, `0.1.0a2`:
 
-`0.1.0a3`: additional exporters, stronger resource-limit configuration, Forge adapter, ModelSwapBench fixtures, PrivateAIStack RAG metadata, policy hooks for AgentPolicyPack.
+- Added aliases for entities, properties, relationships, and actions.
+- Added alias validation with stable validation codes.
+- Added rename-aware diffing for alias-backed entity, relationship, and action renames.
+- Added migration suggestions in diff output.
+- Hardened CLI exports so invalid ontologies are rejected before JSON Schema, Mermaid, or Markdown generation.
+- Improved loader resilience with iterative depth checking, parsed-node limits, and safer file error handling.
+- Improved JSON Schema export for nullable references and deterministic Decimal serialization.
 
-`0.2`: optional SQLite catalog, ontology package imports, modular namespaces, signed manifests, provenance metadata.
+Next alpha, `0.1.0a3`:
+
+- Additional exporters.
+- Stronger resource-limit configuration.
+- More detailed migration hints.
+- Forge adapter.
+- ModelSwapBench fixtures.
+- PrivateAIStack RAG metadata.
+- Policy hooks for AgentPolicyPack.
+
+Later, `0.2`:
+
+- Optional SQLite catalog.
+- Ontology package imports.
+- Modular namespaces.
+- Signed manifests.
+- Provenance metadata.
 
 ## Contributing
 
