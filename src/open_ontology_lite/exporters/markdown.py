@@ -60,8 +60,7 @@ def markdown_docs(
                 constraints.append(f"max={prop.maximum}")
             constraint_text = markdown("; ".join(constraints))
             lines.append(
-                f"| `{markdown(prop_name)}` | `{prop.type}` | "
-                f"{prop.required} | {constraint_text} |"
+                f"| `{markdown(prop_name)}` | `{prop.type}` | {prop.required} | {constraint_text} |"
             )
     lines.extend(
         [
@@ -104,7 +103,6 @@ def markdown_docs(
         for issue in report.issues:
             message = markdown(issue.message)
             lines.append(
-                f"| `{issue.severity}` | `{issue.code}` | "
-                f"`{markdown(issue.path)}` | {message} |"
+                f"| `{issue.severity}` | `{issue.code}` | `{markdown(issue.path)}` | {message} |"
             )
     return "\n".join(lines) + "\n"

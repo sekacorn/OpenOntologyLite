@@ -22,8 +22,18 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev]"
       - run: python -m ruff check .
+      - run: python -m ruff format --check .
       - run: python -m mypy --strict src
       - run: python -m pytest
       - run: python -m bandit -r src
+      - run: python -m pip_audit
+      - run: rm -rf dist build
       - run: python -m build
       - run: python -m twine check dist/*
+      - name: Clean wheel install smoke test
+        run: |
+          python -m venv /tmp/openontologylite-wheel-smoke
+          /tmp/openontologylite-wheel-smoke/bin/python -m pip install --upgrade pip
+          /tmp/openontologylite-wheel-smoke/bin/python -m pip install dist/openontologylite-*.whl
+          /tmp/openontologylite-wheel-smoke/bin/python -c "import open_ontology_lite; print(open_ontology_lite.__version__)"
+          /tmp/openontologylite-wheel-smoke/bin/openontology --help

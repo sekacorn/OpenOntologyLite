@@ -10,6 +10,8 @@ permissions:
 
 jobs:
   test:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,20 +21,64 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev]"
       - run: python -m ruff check .
+      - run: python -m ruff format --check .
       - run: python -m mypy --strict src
       - run: python -m pytest
+      - run: python -m bandit -r src
+      - run: python -m pip_audit
 
   build:
     needs: test
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - name: Validate tag matches package version
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+          import tomllib
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          version = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
+          expected_tag = f"v{version}"
+          if tag != expected_tag:
+              raise SystemExit(f"Tag {tag!r} does not match package version {version!r}; expected {expected_tag!r}.")
+          print(f"Validated tag {tag} matches package version {version}.")
+          PY
       - run: python -m pip install --upgrade pip build twine
+      - run: rm -rf dist build
       - run: python -m build
       - run: python -m twine check dist/*
+      - name: Validate expected artifacts
+        run: |
+          python - <<'PY'
+          import pathlib
+          import tomllib
+
+          version = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
+          expected = {
+              f"openontologylite-{version}-py3-none-any.whl",
+              f"openontologylite-{version}.tar.gz",
+          }
+          actual = {path.name for path in pathlib.Path("dist").iterdir()}
+          missing = expected - actual
+          if missing:
+              raise SystemExit(f"Missing expected artifacts: {sorted(missing)}; found {sorted(actual)}")
+          print(f"Found expected artifacts: {sorted(expected)}")
+          PY
+      - name: Clean wheel install smoke test
+        run: |
+          python -m venv /tmp/openontologylite-wheel-smoke
+          /tmp/openontologylite-wheel-smoke/bin/python -m pip install --upgrade pip
+          /tmp/openontologylite-wheel-smoke/bin/python -m pip install dist/openontologylite-*.whl
+          /tmp/openontologylite-wheel-smoke/bin/python -c "from importlib.metadata import version; print(version('openontologylite'))"
+          /tmp/openontologylite-wheel-smoke/bin/openontology --help
       - uses: actions/upload-artifact@v4
         with:
           name: python-package-distributions

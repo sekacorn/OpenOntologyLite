@@ -105,6 +105,9 @@ def combined_schema(ontology: Ontology, entity: str | None = None) -> dict[str, 
 def json_schema_text(ontology: Ontology, entity: str | None = None) -> str:
     """Return deterministic JSON Schema text."""
 
-    return json.dumps(
-        combined_schema(ontology, entity), sort_keys=True, indent=2, default=_json_default
-    ) + "\n"
+    return (
+        json.dumps(
+            combined_schema(ontology, entity), sort_keys=True, indent=2, default=_json_default
+        )
+        + "\n"
+    )
