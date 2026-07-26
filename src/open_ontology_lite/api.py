@@ -2,6 +2,21 @@
 
 from pathlib import Path
 
+from open_ontology_lite.ai_map import (
+    AIEntity,
+    AIIntegration,
+    AISystemMap,
+    AISystemMapValidationResult,
+    AISystemMetadata,
+    AITask,
+    EscalationPath,
+    ModelRoute,
+    ai_system_map_digest,
+    ai_system_map_mermaid,
+    ai_system_map_report,
+    load_ai_system_map,
+    validate_ai_system_map,
+)
 from open_ontology_lite.diffing import diff_ontologies
 from open_ontology_lite.inspection import inspect_ontology
 from open_ontology_lite.loading import load_ontology
@@ -17,13 +32,26 @@ def load(path: str | Path) -> Ontology:
 
 
 __all__ = [
+    "AIEntity",
+    "AIIntegration",
+    "AISystemMap",
+    "AISystemMapValidationResult",
+    "AISystemMetadata",
+    "AITask",
+    "EscalationPath",
+    "ModelRoute",
     "Ontology",
     "ValidationReport",
+    "ai_system_map_digest",
+    "ai_system_map_mermaid",
+    "ai_system_map_report",
     "diff_ontologies",
     "inspect_ontology",
     "load",
+    "load_ai_system_map",
     "load_ontology",
     "normalize_ontology",
     "ontology_digest",
+    "validate_ai_system_map",
     "validate_ontology",
 ]

@@ -4,16 +4,16 @@ OpenOntologyLite treats ontology files as untrusted input.
 
 ## Supported Version
 
-`0.1.0a2` is an alpha release. Security reports are welcome for the current alpha line.
+`0.1.0a3` is an alpha release. Security reports are welcome for the current alpha line.
 
 ## Threat Model
 
 | Threat | Risk | Mitigation | Remaining limitation |
 |---|---|---|---|
-| Malicious YAML payload | Object construction or code execution | Uses `yaml.safe_load` only | Parser bugs remain possible |
-| Oversized ontology file | Memory or CPU denial of service | File-size and parsed-node limits | Limits are fixed in alpha |
+| Malicious YAML payload | Object construction, ambiguity, or code execution | Uses a `SafeLoader` subclass and rejects duplicate keys | Parser bugs remain possible |
+| Oversized ontology file | Memory or CPU denial of service | Bounded reads plus file-size, parsed-node, nesting, and retained-issue limits | Limits are fixed in alpha |
 | Recursive reference graph | Infinite recursion | Iterative-safe graph traversal and cycle reporting | Cycles may still confuse downstream tools |
-| Terminal escape injection | Misleading CLI output | Validation text is concise and stack traces are hidden by default | Terminal-specific rendering varies |
+| Terminal escape injection | Misleading CLI output | Control characters are stripped from human-readable diagnostics | Terminal-specific rendering varies |
 | Mermaid injection | Diagram corruption | CLI exports validate before rendering and labels are escaped | Mermaid parser behavior may change |
 | Markdown injection | Malformed docs | Table and control-sensitive characters are escaped | Markdown renderers differ |
 | Malicious regex pattern | Regex denial of service downstream | Patterns are not executed by OpenOntologyLite | Consumers must handle patterns safely |

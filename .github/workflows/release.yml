@@ -79,6 +79,8 @@ jobs:
           /tmp/openontologylite-wheel-smoke/bin/python -m pip install dist/openontologylite-*.whl
           /tmp/openontologylite-wheel-smoke/bin/python -c "from importlib.metadata import version; print(version('openontologylite'))"
           /tmp/openontologylite-wheel-smoke/bin/openontology --help
+          /tmp/openontologylite-wheel-smoke/bin/openontology ai-map --help
+          /tmp/openontologylite-wheel-smoke/bin/openontology ai-map validate examples/ai_system_map/customer_support_ai.yaml --strict
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: python-package-distributions

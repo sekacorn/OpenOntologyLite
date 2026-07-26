@@ -9,9 +9,17 @@ from typing import Annotated, NoReturn
 
 import typer
 
+from open_ontology_lite.ai_map import (
+    AISystemMap,
+    ai_system_map_mermaid,
+    ai_system_map_report,
+    load_ai_system_map,
+    validate_ai_system_map,
+)
 from open_ontology_lite.diffing import diff_ontologies, diff_text
 from open_ontology_lite.errors import OpenOntologyLiteError
 from open_ontology_lite.exporters import json_schema_text, markdown_docs, mermaid_text
+from open_ontology_lite.exporters.escaping import plain
 from open_ontology_lite.inspection import inspect_ontology
 from open_ontology_lite.loading import load_ontology
 from open_ontology_lite.models import Ontology
@@ -20,6 +28,12 @@ from open_ontology_lite.validation import find_cycles, validate_ontology
 from open_ontology_lite.version import __version__
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
+ai_map_app = typer.Typer(
+    no_args_is_help=True,
+    add_completion=False,
+    help="Validate and document portable AI workload maps.",
+)
+app.add_typer(ai_map_app, name="ai-map")
 
 
 def _version_callback(value: bool) -> None:
@@ -41,7 +55,7 @@ def main(
 def _fail(exc: Exception, *, debug: bool = False) -> NoReturn:
     if debug:
         raise exc
-    typer.echo(str(exc), err=True)
+    typer.echo(plain(exc), err=True)
     raise typer.Exit(2)
 
 
@@ -60,15 +74,135 @@ def _load(path: Path, debug: bool = False) -> Ontology:
         _fail(exc, debug=debug)
 
 
+def _load_ai_map(path: Path, debug: bool = False) -> AISystemMap:
+    try:
+        return load_ai_system_map(path)
+    except OpenOntologyLiteError as exc:
+        _fail(exc, debug=debug)
+
+
 def _require_valid(ontology: Ontology) -> None:
     report = validate_ontology(ontology)
     if report.errors:
         first = report.errors[0]
         typer.echo(
-            f"Cannot export invalid ontology: {first.code} {first.path}: {first.message}",
+            "Cannot export invalid ontology: "
+            f"{plain(first.code)} {plain(first.path)}: {plain(first.message)}",
             err=True,
         )
         raise typer.Exit(1)
+
+
+def _require_valid_ai_map(ai_map: AISystemMap, *, fail_on_warning: bool = False) -> None:
+    report = validate_ai_system_map(ai_map)
+    if report.errors or (fail_on_warning and report.warnings):
+        for issue in report.issues:
+            typer.echo(
+                f"{issue.severity.upper()} {plain(issue.code)} "
+                f"{plain(issue.path)}: {plain(issue.message)}",
+                err=True,
+            )
+        raise typer.Exit(1)
+
+
+@ai_map_app.command("validate")
+def ai_map_validate(
+    file: Path,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit a JSON validation result.")
+    ] = False,
+    fail_on_warning: Annotated[
+        bool,
+        typer.Option(
+            "--strict",
+            "--fail-on-warning",
+            help="Exit nonzero when validation produces warnings.",
+        ),
+    ] = False,
+    debug: Annotated[
+        bool, typer.Option("--debug", help="Show stack traces for maintainers.")
+    ] = False,
+) -> None:
+    """Validate an AI System Map."""
+
+    result = validate_ai_system_map(_load_ai_map(file, debug))
+    if json_output:
+        typer.echo(json.dumps(result.to_dict(), sort_keys=True, indent=2))
+    elif result.valid and not result.warnings:
+        typer.echo("AI System Map is valid.")
+    else:
+        for issue in result.issues:
+            typer.echo(
+                f"{issue.severity.upper()} {plain(issue.code)} "
+                f"{plain(issue.path)}: {plain(issue.message)}"
+            )
+        if result.valid:
+            typer.echo(f"AI System Map is valid with {len(result.warnings)} warning(s).")
+    if result.errors or (fail_on_warning and result.warnings):
+        raise typer.Exit(1)
+
+
+@ai_map_app.command("report")
+def ai_map_report_cmd(
+    file: Path,
+    format_name: Annotated[
+        str, typer.Option("--format", help="Report format (markdown).")
+    ] = "markdown",
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Write output to a file.")
+    ] = None,
+    fail_on_warning: Annotated[
+        bool,
+        typer.Option(
+            "--strict",
+            "--fail-on-warning",
+            help="Exit nonzero when validation produces warnings.",
+        ),
+    ] = False,
+    debug: Annotated[
+        bool, typer.Option("--debug", help="Show stack traces for maintainers.")
+    ] = False,
+) -> None:
+    """Generate a deterministic AI System Map report."""
+
+    if format_name.casefold() not in {"markdown", "md"}:
+        typer.echo("Unsupported report format. Use markdown.", err=True)
+        raise typer.Exit(2)
+    ai_map = _load_ai_map(file, debug)
+    _require_valid_ai_map(ai_map, fail_on_warning=fail_on_warning)
+    result = validate_ai_system_map(ai_map)
+    _write(ai_system_map_report(ai_map, validation=result, source=file.name), output)
+
+
+@ai_map_app.command("render")
+def ai_map_render(
+    file: Path,
+    format_name: Annotated[
+        str, typer.Option("--format", help="Render format (mermaid).")
+    ] = "mermaid",
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Write output to a file.")
+    ] = None,
+    fail_on_warning: Annotated[
+        bool,
+        typer.Option(
+            "--strict",
+            "--fail-on-warning",
+            help="Exit nonzero when validation produces warnings.",
+        ),
+    ] = False,
+    debug: Annotated[
+        bool, typer.Option("--debug", help="Show stack traces for maintainers.")
+    ] = False,
+) -> None:
+    """Render an AI System Map."""
+
+    if format_name.casefold() not in {"mermaid", "mmd"}:
+        typer.echo("Unsupported render format. Use mermaid.", err=True)
+        raise typer.Exit(2)
+    ai_map = _load_ai_map(file, debug)
+    _require_valid_ai_map(ai_map, fail_on_warning=fail_on_warning)
+    _write(ai_system_map_mermaid(ai_map), output)
 
 
 @app.command()
@@ -103,7 +237,10 @@ def validate(
             typer.echo(f"Warnings: {len(report.warnings)}")
     else:
         for issue in report.issues:
-            typer.echo(f"{issue.severity.upper()} {issue.code} {issue.path}: {issue.message}")
+            typer.echo(
+                f"{issue.severity.upper()} {plain(issue.code)} "
+                f"{plain(issue.path)}: {plain(issue.message)}"
+            )
     if report.errors:
         raise typer.Exit(1)
 
@@ -123,7 +260,7 @@ def inspect(
         typer.echo(json.dumps(summary.model_dump(), sort_keys=True, indent=2))
     else:
         for key, value in summary.model_dump().items():
-            typer.echo(f"{key}: {value}")
+            typer.echo(f"{plain(key)}: {plain(value)}")
 
 
 @app.command()
@@ -170,7 +307,9 @@ def cycles(
         typer.echo("No cycles detected.")
     else:
         for cycle in found:
-            typer.echo(f"{cycle.classification}: {' -> '.join(cycle.path)}")
+            typer.echo(
+                f"{plain(cycle.classification)}: {' -> '.join(plain(part) for part in cycle.path)}"
+            )
 
 
 @app.command("export-json-schema")
@@ -191,7 +330,7 @@ def export_json_schema(
     ontology = _load(file, debug)
     _require_valid(ontology)
     if entity and entity not in ontology.entities:
-        typer.echo(f"Unknown entity: {entity}", err=True)
+        typer.echo(f"Unknown entity: {plain(entity)}", err=True)
         raise typer.Exit(2)
     _write(json_schema_text(ontology, entity), output)
 

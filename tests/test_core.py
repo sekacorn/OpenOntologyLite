@@ -304,7 +304,7 @@ def test_cli_acceptance_commands(tmp_path: Path) -> None:
 def test_cli_json_modes_and_version() -> None:
     example = str(EXAMPLES / "customer_support.yaml")
     assert runner.invoke(app, ["--version"]).exit_code == 0
-    assert runner.invoke(app, ["version"]).output.strip() == "0.1.0a2"
+    assert runner.invoke(app, ["version"]).output.strip() == "0.1.0a3"
     assert '"ok": true' in runner.invoke(app, ["validate", example, "--json"]).output
     assert "canonical_digest" in runner.invoke(app, ["inspect", example, "--json"]).output
     assert runner.invoke(app, ["cycles", example, "--json"]).exit_code == 0
@@ -453,3 +453,70 @@ def test_loader_rejects_excessive_parsed_nodes(tmp_path: Path) -> None:
     path.write_text('{"nodes":[' + ",".join("0" for _ in range(100_001)) + "]}", encoding="utf-8")
     with pytest.raises(UnsafeInputError, match="parsed nodes"):
         load_json_raw(path)
+
+
+def test_loader_rejects_excessive_parser_nesting(tmp_path: Path) -> None:
+    path = tmp_path / "too_deep.json"
+    path.write_text(
+        '{"nested":' + "[" * 2_000 + "0" + "]" * 2_000 + "}",
+        encoding="utf-8",
+    )
+    with pytest.raises(UnsafeInputError, match=r"parser nesting|nesting exceeds"):
+        load_json_raw(path)
+
+
+def test_loader_errors_do_not_echo_sensitive_input(tmp_path: Path) -> None:
+    malformed = tmp_path / "malformed-private.yaml"
+    malformed.write_text("private_field: [private-value", encoding="utf-8")
+    with pytest.raises(OntologyParseError) as malformed_error:
+        load_ontology(malformed)
+    assert "private-value" not in str(malformed_error.value)
+
+    invalid = tmp_path / "invalid-private.yaml"
+    invalid.write_text(
+        """
+schema_version: "1.0"
+ontology:
+  id: [private-value]
+  name: Invalid
+  version: "1"
+  namespace: example.invalid
+entities: {}
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(OntologyParseError) as invalid_error:
+        load_ontology(invalid)
+    assert "private-value" not in str(invalid_error.value)
+
+
+def test_yaml_merge_keys_remain_supported(tmp_path: Path) -> None:
+    path = tmp_path / "merge.yaml"
+    path.write_text(
+        """
+schema_version: "1.0"
+ontology: {id: merge, name: Merge, version: "1", namespace: example.merge}
+entities:
+  Thing:
+    properties:
+      id:
+        <<: &string_property {type: string}
+        required: true
+""",
+        encoding="utf-8",
+    )
+    assert load_ontology(path).entities["Thing"].properties["id"].required
+
+
+def test_yaml_normalized_duplicate_keys_are_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "normalized-duplicate.yaml"
+    path.write_text(
+        """
+mapping:
+  1: first
+  01: second
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(OntologyParseError, match="duplicate"):
+        load_yaml_raw(path)

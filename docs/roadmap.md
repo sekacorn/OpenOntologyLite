@@ -6,6 +6,10 @@ Aliases, rename-aware diffing, and migration hints.
 
 ## 0.1.0a3
 
+AI System Maps, workload risk and routing validation, Markdown reports, Mermaid rendering, deterministic digesting, public APIs, and hardened untrusted-input handling.
+
+## Next Alpha
+
 Additional exporters, stronger resource-limit configuration, Forge adapter, ModelSwapBench ontology-aware benchmark fixtures, PrivateAIStack ontology-backed RAG metadata, and policy hooks for AgentPolicyPack.
 
 ## 0.2
