@@ -197,7 +197,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run Ruff, mypy strict, pytest with branc
 
 ## License
 
-MIT.
+[Apache License 2.0](LICENSE).
 
 ## Author
 
