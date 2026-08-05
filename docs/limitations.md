@@ -7,6 +7,13 @@
 - No graphical editor.
 - No action execution.
 - No authorization enforcement.
+- No AgentPolicyPack policy evaluation or enforcement.
+- No Forge tool registration or execution.
+- No AIAuditLog persistence, chaining, or signing.
+- No AIMeter invoice or realized-savings calculation.
+- No ModelSwapBench workload execution.
+- No PrivateAIStack document ingestion or database synchronization.
+- No compliance certification.
 - Preconditions are declarative text only.
 - No remote schema resolution.
 - No hosted service.
@@ -14,3 +21,4 @@
 - JSON Schema export may be lossy for ontology-specific semantics.
 - Relationship cycles are reported but not automatically invalid.
 - Format may evolve before stable 1.0.
+- Local modules are a bounded composition foundation, not a package manager or hosted registry.

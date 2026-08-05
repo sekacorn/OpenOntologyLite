@@ -16,24 +16,39 @@ from open_ontology_lite.ai_map import (
     load_ai_system_map,
     validate_ai_system_map,
 )
+from open_ontology_lite.contracts import generate_tool_contract
 from open_ontology_lite.diffing import diff_ontologies, diff_text
 from open_ontology_lite.errors import OpenOntologyLiteError
 from open_ontology_lite.exporters import json_schema_text, markdown_docs, mermaid_text
 from open_ontology_lite.exporters.escaping import plain
 from open_ontology_lite.inspection import inspect_ontology
-from open_ontology_lite.loading import load_ontology
+from open_ontology_lite.loading import load_ontology, load_raw
+from open_ontology_lite.migrations import (
+    build_migration_plan,
+    migration_plan_json,
+    migration_plan_markdown,
+)
 from open_ontology_lite.models import Ontology
 from open_ontology_lite.normalization import canonical_json, ontology_digest
+from open_ontology_lite.runtime import check_action_contract, validate_entity_instance
 from open_ontology_lite.validation import find_cycles, validate_ontology
 from open_ontology_lite.version import __version__
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
+entity_app = typer.Typer(no_args_is_help=True, add_completion=False, help="Validate entity data.")
+action_app = typer.Typer(no_args_is_help=True, add_completion=False, help="Check action contracts.")
+contract_app = typer.Typer(
+    no_args_is_help=True, add_completion=False, help="Generate neutral handoff contracts."
+)
 ai_map_app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
     help="Validate and document portable AI workload maps.",
 )
 app.add_typer(ai_map_app, name="ai-map")
+app.add_typer(entity_app, name="entity")
+app.add_typer(action_app, name="action")
+app.add_typer(contract_app, name="contract")
 
 
 def _version_callback(value: bool) -> None:
@@ -79,6 +94,121 @@ def _load_ai_map(path: Path, debug: bool = False) -> AISystemMap:
         return load_ai_system_map(path)
     except OpenOntologyLiteError as exc:
         _fail(exc, debug=debug)
+
+
+def _load_data(path: Path, debug: bool = False) -> dict[str, object]:
+    try:
+        return load_raw(path)
+    except OpenOntologyLiteError as exc:
+        _fail(exc, debug=debug)
+
+
+def _runtime_text(result: object) -> str:
+    issues = getattr(result, "issues", ())
+    if not issues:
+        return "Contract is satisfied.\n"
+    return "".join(
+        f"{issue.severity.upper()} {plain(issue.code)} {plain(issue.path)}: "
+        f"{plain(issue.message)}\n"
+        for issue in issues
+    )
+
+
+@entity_app.command("validate")
+def entity_validate(
+    ontology_file: Path,
+    entity_type: str,
+    instance: Path,
+    json_output: Annotated[bool, typer.Option("--json", help="Emit JSON result.")] = False,
+    non_strict: Annotated[
+        bool, typer.Option("--non-strict", help="Warn instead of error on unknown properties.")
+    ] = False,
+    debug: Annotated[
+        bool, typer.Option("--debug", help="Show stack traces for maintainers.")
+    ] = False,
+) -> None:
+    """Validate one local JSON or YAML entity instance."""
+
+    result = validate_entity_instance(
+        _load(ontology_file, debug),
+        entity_type=entity_type,
+        value=_load_data(instance, debug),
+        strict=not non_strict,
+    )
+    _write(
+        json.dumps(result.to_dict(), sort_keys=True, indent=2) + "\n"
+        if json_output
+        else _runtime_text(result),
+        None,
+    )
+    if not result.valid:
+        raise typer.Exit(1)
+
+
+@action_app.command("check")
+def action_check(
+    ontology_file: Path,
+    action_name: str,
+    inputs: Path,
+    permissions: Annotated[
+        list[str] | None,
+        typer.Option("--permission", "-p", help="Permission held by the proposed actor."),
+    ] = None,
+    context: Annotated[
+        Path | None, typer.Option("--context", help="Local JSON or YAML context object.")
+    ] = None,
+    output_value: Annotated[
+        Path | None, typer.Option("--output-value", help="Local JSON or YAML output object.")
+    ] = None,
+    json_output: Annotated[bool, typer.Option("--json", help="Emit JSON result.")] = False,
+    non_strict: Annotated[
+        bool, typer.Option("--non-strict", help="Warn instead of error on unknown inputs.")
+    ] = False,
+    debug: Annotated[
+        bool, typer.Option("--debug", help="Show stack traces for maintainers.")
+    ] = False,
+) -> None:
+    """Check a proposed invocation without making an authorization decision."""
+
+    result = check_action_contract(
+        _load(ontology_file, debug),
+        action=action_name,
+        inputs=_load_data(inputs, debug),
+        actor_permissions=permissions or (),
+        context=_load_data(context, debug) if context else None,
+        output=_load_data(output_value, debug) if output_value else None,
+        strict=not non_strict,
+    )
+    _write(
+        json.dumps(result.to_dict(), sort_keys=True, indent=2) + "\n"
+        if json_output
+        else _runtime_text(result),
+        None,
+    )
+    if result.status == "unsatisfied":
+        raise typer.Exit(1)
+    if result.status == "indeterminate":
+        raise typer.Exit(3)
+
+
+@contract_app.command("tool")
+def contract_tool(
+    ontology_file: Path,
+    action_name: str,
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Write output to a file.")
+    ] = None,
+    debug: Annotated[
+        bool, typer.Option("--debug", help="Show stack traces for maintainers.")
+    ] = False,
+) -> None:
+    """Generate a neutral Forge-compatible tool description."""
+
+    try:
+        contract = generate_tool_contract(_load(ontology_file, debug), action_name)
+    except KeyError as exc:
+        _fail(exc, debug=debug)
+    _write(json.dumps(contract.to_dict(), sort_keys=True, indent=2) + "\n", output)
 
 
 def _require_valid(ontology: Ontology) -> None:
@@ -408,6 +538,34 @@ def diff(
     _write(text, output)
     if result.breaking_count:
         raise typer.Exit(1)
+
+
+@app.command("migration-plan")
+def migration_plan(
+    old_file: Path,
+    new_file: Path,
+    format_name: Annotated[
+        str, typer.Option("--format", help="Output format: json or markdown.")
+    ] = "json",
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Write output to a file.")
+    ] = None,
+    debug: Annotated[
+        bool, typer.Option("--debug", help="Show stack traces for maintainers.")
+    ] = False,
+) -> None:
+    """Generate deterministic, non-mutating migration guidance."""
+
+    plan = build_migration_plan(_load(old_file, debug), _load(new_file, debug))
+    normalized_format = format_name.casefold()
+    if normalized_format == "json":
+        text = migration_plan_json(plan)
+    elif normalized_format in {"markdown", "md"}:
+        text = migration_plan_markdown(plan)
+    else:
+        typer.echo("Unsupported migration-plan format. Use json or markdown.", err=True)
+        raise typer.Exit(2)
+    _write(text, output)
 
 
 def run() -> None:

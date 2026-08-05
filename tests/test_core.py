@@ -304,7 +304,7 @@ def test_cli_acceptance_commands(tmp_path: Path) -> None:
 def test_cli_json_modes_and_version() -> None:
     example = str(EXAMPLES / "customer_support.yaml")
     assert runner.invoke(app, ["--version"]).exit_code == 0
-    assert runner.invoke(app, ["version"]).output.strip() == "0.1.0a3"
+    assert runner.invoke(app, ["version"]).output.strip() == "0.1.0a4"
     assert '"ok": true' in runner.invoke(app, ["validate", example, "--json"]).output
     assert "canonical_digest" in runner.invoke(app, ["inspect", example, "--json"]).output
     assert runner.invoke(app, ["cycles", example, "--json"]).exit_code == 0

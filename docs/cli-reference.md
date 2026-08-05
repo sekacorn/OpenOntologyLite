@@ -11,6 +11,10 @@ Commands:
 - `openontology export-mermaid <file>`
 - `openontology docs <file>`
 - `openontology diff <old-file> <new-file>`
+- `openontology entity validate <ontology> <entity-type> <instance> [--json]`
+- `openontology action check <ontology> <action> <inputs> [-p <permission>] [--json]`
+- `openontology contract tool <ontology> <action>`
+- `openontology migration-plan <old-file> <new-file> --format json|markdown`
 - `openontology ai-map validate <file>`
 - `openontology ai-map report <file> [--format markdown]`
 - `openontology ai-map render <file> [--format mermaid]`
@@ -27,3 +31,9 @@ AI System Map commands use the same exit convention:
 - `2`: malformed input, unsupported format, or execution error.
 
 `ai-map report` and `ai-map render` validate before writing. Reports and Mermaid source are deterministic for the same normalized map.
+
+Runtime entity validation exits `0` for a valid instance, `1` for contract errors, and `2`
+for malformed or unsafe files. Action checks additionally use `3` for an indeterminate
+contract, such as one with declarative preconditions that require external evaluation.
+`--non-strict` turns unknown entity properties or action inputs into warnings. It does not
+relax declared types, constraints, permissions, or required fields.

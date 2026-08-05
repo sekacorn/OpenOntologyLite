@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openontologylite"
-version = "0.1.0a3"
-description = "A lightweight, vendor-neutral semantic layer for portable organizational knowledge."
+version = "0.1.0a4"
+description = "A lightweight executable semantic-contract toolkit for portable organizational knowledge."
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = "Apache-2.0"

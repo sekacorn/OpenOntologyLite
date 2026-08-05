@@ -1,5 +1,7 @@
 """Core ontology data models."""
 
+from __future__ import annotations
+
 from collections.abc import Iterable
 from decimal import Decimal
 from typing import Any, Literal
@@ -21,6 +23,7 @@ PropertyType = Literal[
 ]
 Cardinality = Literal["one_to_one", "one_to_many", "many_to_one", "many_to_many"]
 RiskLevel = Literal["low", "medium", "high", "critical"]
+ActionRiskLevel = Literal["low", "medium", "high", "critical", "regulated", "unknown"]
 
 
 class StrictModel(BaseModel):
@@ -72,6 +75,8 @@ class PropertyDef(StrictModel):
     min_length: int | None = None
     max_length: int | None = None
     items: PropertyType | None = None
+    items_schema: PropertyDef | None = None
+    properties: dict[str, PropertyDef] = Field(default_factory=dict)
     target: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -139,10 +144,23 @@ class ActionDef(StrictModel):
     permissions: tuple[str, ...] = ()
     preconditions: tuple[str, ...] = ()
     effects: str = ""
+    risk: ActionRiskLevel = "low"
+    review_required: bool = False
+    escalation: tuple[str, ...] = ()
+    audit_required: bool = True
+    expected_audit_events: tuple[str, ...] = ()
     tags: tuple[str, ...] = ()
     metadata: dict[str, Any] = Field(default_factory=dict)
 
-    @field_validator("aliases", "permissions", "preconditions", "tags", mode="before")
+    @field_validator(
+        "aliases",
+        "permissions",
+        "preconditions",
+        "escalation",
+        "expected_audit_events",
+        "tags",
+        mode="before",
+    )
     @classmethod
     def _tuple(cls, value: object) -> object:
         return _tuple_or_empty(value)
@@ -162,6 +180,15 @@ class PermissionDef(StrictModel):
         return _tuple_or_empty(value)
 
 
+class OntologyImport(StrictModel):
+    """A bounded local ontology-module import declaration."""
+
+    path: str
+    namespace: str | None = None
+    version: str | None = None
+    digest: str | None = None
+
+
 class Ontology(StrictModel):
     """A normalized internal ontology model."""
 
@@ -171,15 +198,16 @@ class Ontology(StrictModel):
     relationships: tuple[RelationshipDef, ...] = ()
     actions: tuple[ActionDef, ...] = ()
     permissions: dict[str, PermissionDef] = Field(default_factory=dict)
+    imports: tuple[OntologyImport, ...] = ()
     metadata: dict[str, Any] = Field(default_factory=dict)
 
-    @field_validator("relationships", "actions", mode="before")
+    @field_validator("relationships", "actions", "imports", mode="before")
     @classmethod
     def _as_tuple(cls, value: object) -> object:
         return _tuple_or_empty(value)
 
     @model_validator(mode="after")
-    def _inject_entity_ids(self) -> "Ontology":
+    def _inject_entity_ids(self) -> Ontology:
         enriched = {
             key: value.model_copy(update={"id": value.id or key, "name": value.name or key})
             for key, value in self.entities.items()

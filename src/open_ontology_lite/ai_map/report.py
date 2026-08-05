@@ -91,6 +91,43 @@ def ai_system_map_report(
     if not ai_map.tasks:
         lines.append("| None | - | - | - | - | - |")
 
+    lines.extend(
+        [
+            "",
+            "## Data, Models, and Tool Boundaries",
+            "",
+            "| Task | Data sources | Retrieval boundaries | Models | Tool access |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+    )
+    for task in ai_map.tasks:
+        lines.append(
+            f"| {markdown(task.name)} | {_joined(task.data_sources)} | "
+            f"{_joined(task.retrieval_boundaries)} | {_joined(task.models)} | "
+            f"{_joined(task.tool_access)} |"
+        )
+    if not ai_map.tasks:
+        lines.append("| None | - | - | - | - |")
+
+    lines.extend(
+        [
+            "",
+            "## Deployment and Data Handling",
+            "",
+            "| Task | Data handling | Retention | Deployment restrictions | Geography |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+    )
+    for task in ai_map.tasks:
+        lines.append(
+            f"| {markdown(task.name)} | {_joined(task.data_handling_expectations)} | "
+            f"{markdown(task.data_retention or 'Not specified')} | "
+            f"{_joined(task.deployment_restrictions)} | "
+            f"{_joined(task.geographic_restrictions)} |"
+        )
+    if not ai_map.tasks:
+        lines.append("| None | - | - | - | - |")
+
     lines.extend(["", "## Risk Summary", ""])
     for risk in sorted(risk_counts):
         lines.append(f"- {markdown(risk)}: {risk_counts[risk]}")

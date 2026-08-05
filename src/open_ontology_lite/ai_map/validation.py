@@ -11,6 +11,7 @@ from open_ontology_lite.ai_map.models import (
     SENSITIVITY_LEVELS,
     AISystemMap,
 )
+from open_ontology_lite.models import Ontology
 from open_ontology_lite.models.validation import ValidationIssue
 
 _SENSITIVE_CATEGORIES = {
@@ -110,7 +111,9 @@ def _category_tokens(category: str) -> set[str]:
     return set(re.findall(r"[a-z]+", category.casefold()))
 
 
-def validate_ai_system_map(ai_map: AISystemMap) -> AISystemMapValidationResult:
+def validate_ai_system_map(
+    ai_map: AISystemMap, ontology: Ontology | None = None
+) -> AISystemMapValidationResult:
     """Validate references, routing controls, and reporting expectations."""
 
     issues = _IssueCollector()
@@ -333,7 +336,7 @@ def validate_ai_system_map(ai_map: AISystemMap) -> AISystemMapValidationResult:
                 )
 
         candidate_allowed = "candidate_model" in task.allowed_routes
-        if task.risk_level in {"high", "regulated"} and candidate_allowed:
+        if task.risk_level in {"high", "regulated", "unknown"} and candidate_allowed:
             if not task.human_review_required and not task.candidate_route_justification:
                 severity = "error" if task.risk_level == "regulated" else "warning"
                 issues.append(
@@ -373,6 +376,35 @@ def validate_ai_system_map(ai_map: AISystemMap) -> AISystemMapValidationResult:
                     path,
                 )
             )
+        if sensitive and not task.data_handling_expectations:
+            issues.append(
+                _issue(
+                    "warning",
+                    "SENSITIVE_DATA_HANDLING_REQUIRED",
+                    "Sensitive tasks require declared data-handling expectations.",
+                    f"{path}.data_handling_expectations",
+                )
+            )
+        if task.human_review_required and not (
+            task.human_review_points or task.escalation or "human_review" in task.allowed_routes
+        ):
+            issues.append(
+                _issue(
+                    "error",
+                    "HUMAN_REVIEW_PATH_REQUIRED",
+                    "Human review is required but no review point or review route is declared.",
+                    f"{path}.human_review_points",
+                )
+            )
+        if task.escalation_required and not task.escalation:
+            issues.append(
+                _issue(
+                    "error",
+                    "ESCALATION_ROUTE_REQUIRED",
+                    "Escalation is required but no escalation route is declared.",
+                    f"{path}.escalation",
+                )
+            )
         if task.audit_required and not task.expected_audit_events:
             issues.append(
                 _issue(
@@ -400,5 +432,39 @@ def validate_ai_system_map(ai_map: AISystemMap) -> AISystemMapValidationResult:
                     f"{path}.escalation",
                 )
             )
+        if ontology is not None:
+            ontology_entities = set(ontology.entities)
+            ontology_actions = {action.name for action in ontology.actions}
+            ontology_permissions = set(ontology.permissions)
+            for entity_name in task.ontology_entities:
+                if entity_name not in ontology_entities:
+                    issues.append(
+                        _issue(
+                            "error",
+                            "UNKNOWN_ONTOLOGY_ENTITY",
+                            f"Task references an unknown ontology entity: {entity_name}",
+                            f"{path}.ontology_entities",
+                        )
+                    )
+            for action_name in task.ontology_actions:
+                if action_name not in ontology_actions:
+                    issues.append(
+                        _issue(
+                            "error",
+                            "UNKNOWN_ONTOLOGY_ACTION",
+                            f"Task references an unknown ontology action: {action_name}",
+                            f"{path}.ontology_actions",
+                        )
+                    )
+            for permission_name in task.ontology_permissions:
+                if permission_name not in ontology_permissions:
+                    issues.append(
+                        _issue(
+                            "error",
+                            "UNKNOWN_ONTOLOGY_PERMISSION",
+                            f"Task references an unknown ontology permission: {permission_name}",
+                            f"{path}.ontology_permissions",
+                        )
+                    )
 
     return AISystemMapValidationResult(issues.to_tuple())

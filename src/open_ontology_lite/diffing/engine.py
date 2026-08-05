@@ -40,6 +40,25 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
     """Compare two ontologies using conservative rule-based classification."""
 
     changes: list[DiffChange] = []
+    if old.ontology.id != new.ontology.id:
+        changes.append(
+            _change(
+                "breaking",
+                "ONTOLOGY_ID_CHANGED",
+                "ontology.id",
+                f"Ontology identity changed from '{old.ontology.id}' to '{new.ontology.id}'.",
+            )
+        )
+    if old.ontology.namespace != new.ontology.namespace:
+        changes.append(
+            _change(
+                "potentially_breaking",
+                "ONTOLOGY_NAMESPACE_CHANGED",
+                "ontology.namespace",
+                "Ontology namespace changed.",
+                "Update namespace-qualified references in downstream contracts.",
+            )
+        )
     old_entities = set(old.entities)
     new_entities = set(new.entities)
 
@@ -150,6 +169,15 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
                         f"Property '{prop}' changed type from {old_prop.type} to {new_prop.type}.",
                     )
                 )
+            if old_prop.default != new_prop.default:
+                changes.append(
+                    _change(
+                        "potentially_breaking",
+                        "PROPERTY_DEFAULT_CHANGED",
+                        path,
+                        f"Default for '{prop}' changed.",
+                    )
+                )
             if old_prop.enum is not None and new_prop.enum is not None:
                 removed = set(old_prop.enum) - set(new_prop.enum)
                 added = set(new_prop.enum) - set(old_prop.enum)
@@ -209,6 +237,57 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
                         f"Maximum for '{prop}' became stricter.",
                     )
                 )
+            if (
+                old_prop.minimum is not None
+                and new_prop.minimum is not None
+                and new_prop.minimum < old_prop.minimum
+            ) or (
+                old_prop.maximum is not None
+                and new_prop.maximum is not None
+                and new_prop.maximum > old_prop.maximum
+            ):
+                changes.append(
+                    _change(
+                        "non_breaking",
+                        "NUMERIC_LIMIT_RELAXED",
+                        path,
+                        f"Numeric limits for '{prop}' were relaxed.",
+                    )
+                )
+            if (
+                old_prop.min_length is not None
+                and new_prop.min_length is not None
+                and new_prop.min_length > old_prop.min_length
+            ) or (
+                old_prop.max_length is not None
+                and new_prop.max_length is not None
+                and new_prop.max_length < old_prop.max_length
+            ):
+                changes.append(
+                    _change(
+                        "potentially_breaking",
+                        "LENGTH_LIMIT_STRICTER",
+                        path,
+                        f"Length limits for '{prop}' became stricter.",
+                    )
+                )
+            if (
+                old_prop.min_length is not None
+                and new_prop.min_length is not None
+                and new_prop.min_length < old_prop.min_length
+            ) or (
+                old_prop.max_length is not None
+                and new_prop.max_length is not None
+                and new_prop.max_length > old_prop.max_length
+            ):
+                changes.append(
+                    _change(
+                        "non_breaking",
+                        "LENGTH_LIMIT_RELAXED",
+                        path,
+                        f"Length limits for '{prop}' were relaxed.",
+                    )
+                )
             if old_prop.pattern != new_prop.pattern and old_prop.pattern is not None:
                 changes.append(
                     _change(
@@ -257,7 +336,25 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
                 f"Relationship '{name}' was removed.",
             )
         )
+    for name in sorted((set(new_rels) - set(old_rels)) - set(relationship_renames.values())):
+        changes.append(
+            _change(
+                "non_breaking",
+                "RELATIONSHIP_ADDED",
+                f"relationships.{name}",
+                f"Relationship '{name}' was added.",
+            )
+        )
     for name in sorted(set(old_rels) & set(new_rels)):
+        if old_rels[name].from_ != new_rels[name].from_:
+            changes.append(
+                _change(
+                    "breaking",
+                    "RELATIONSHIP_SOURCE_CHANGED",
+                    f"relationships.{name}.from",
+                    f"Relationship '{name}' source changed.",
+                )
+            )
         if old_rels[name].to != new_rels[name].to:
             changes.append(
                 _change(
@@ -311,6 +408,15 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
     for name in sorted(set(old_actions) & set(new_actions)):
         old_action = old_actions[name]
         new_action = new_actions[name]
+        for input_name in sorted(set(old_action.inputs) - set(new_action.inputs)):
+            changes.append(
+                _change(
+                    "breaking",
+                    "ACTION_INPUT_REMOVED",
+                    f"actions.{name}.inputs.{input_name}",
+                    f"Action input '{input_name}' was removed from '{name}'.",
+                )
+            )
         for input_name in sorted(set(new_action.inputs) - set(old_action.inputs)):
             new_input = new_action.inputs[input_name]
             classification = (
@@ -329,6 +435,25 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
                     f"Action input '{input_name}' was added to '{name}'.",
                 )
             )
+        for input_name in sorted(set(old_action.inputs) & set(new_action.inputs)):
+            if old_action.inputs[input_name].type != new_action.inputs[input_name].type:
+                changes.append(
+                    _change(
+                        "breaking",
+                        "ACTION_INPUT_TYPE_CHANGED",
+                        f"actions.{name}.inputs.{input_name}",
+                        f"Action input '{input_name}' changed type.",
+                    )
+                )
+        if old_action.output != new_action.output:
+            changes.append(
+                _change(
+                    "potentially_breaking",
+                    "ACTION_OUTPUT_CHANGED",
+                    f"actions.{name}.output",
+                    f"Action '{name}' output contract changed.",
+                )
+            )
         if set(new_action.permissions) - set(old_action.permissions):
             changes.append(
                 _change(
@@ -336,6 +461,36 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
                     "ACTION_PERMISSION_STRICTER",
                     f"actions.{name}.permissions",
                     f"Action '{name}' requires additional permissions.",
+                )
+            )
+        if set(old_action.permissions) - set(new_action.permissions):
+            changes.append(
+                _change(
+                    "non_breaking",
+                    "ACTION_PERMISSION_RELAXED",
+                    f"actions.{name}.permissions",
+                    f"Action '{name}' requires fewer permissions.",
+                )
+            )
+        if old_action.risk != new_action.risk:
+            changes.append(
+                _change(
+                    "potentially_breaking",
+                    "ACTION_RISK_CHANGED",
+                    f"actions.{name}.risk",
+                    f"Action '{name}' risk classification changed.",
+                )
+            )
+        if old_action.review_required != new_action.review_required:
+            classification = (
+                "potentially_breaking" if new_action.review_required else "non_breaking"
+            )
+            changes.append(
+                _change(
+                    classification,
+                    "ACTION_REVIEW_CHANGED",
+                    f"actions.{name}.review_required",
+                    f"Action '{name}' review requirement changed.",
                 )
             )
         if old_action.preconditions != new_action.preconditions:

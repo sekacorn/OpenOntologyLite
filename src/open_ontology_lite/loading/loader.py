@@ -110,6 +110,8 @@ def _depth(value: object, current: int = 0) -> int:
 
 
 def _ensure_safe_path(path: Path) -> None:
+    if path.is_symlink():
+        raise UnsafeInputError(f"Symbolic links are not accepted as ontology input: {path}")
     try:
         path_stat = path.stat()
     except OSError as exc:

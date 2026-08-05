@@ -1,6 +1,8 @@
 # OpenOntologyLite
 
-OpenOntologyLite makes organizational meaning portable across AI models, agent frameworks, databases, and vendors.
+OpenOntologyLite is a lightweight, executable semantic-contract toolkit for defining and
+validating organizational entities, relationships, actions, permissions, and AI workloads
+across models, agents, databases, and vendors.
 
 ## Status
 
@@ -8,7 +10,9 @@ Ready for public alpha release preparation with documented limitations.
 
 ## Alpha Warning
 
-OpenOntologyLite is `0.1.0a3` alpha software. The format may evolve before stable 1.0, and diff classifications are conservative rule-based guidance rather than legal, operational, or authorization guarantees.
+OpenOntologyLite is `0.1.0a4` alpha software. Executable means deterministic validation and
+contract transformation. It does not execute actions, enforce authorization, or perform
+general-purpose inference.
 
 ## Why It Exists
 
@@ -18,11 +22,14 @@ Organizations increasingly describe their work inside AI systems, agent framewor
 
 - YAML and JSON ontology loading with safe parsers.
 - Typed entities, properties, relationships, actions, permissions, and preconditions.
+- Runtime entity-instance validation and non-enforcing action-contract checks.
+- Versioned neutral tool, policy, audit, meter, benchmark, and RAG handoff contracts.
 - Structural and semantic validation with stable machine-readable codes.
 - Deterministic canonical JSON and SHA-256 digest generation.
 - Cycle analysis for relationships and reference properties.
 - JSON Schema 2020-12, Mermaid, Markdown documentation, inspection, and diff exports.
 - Typed AI System Maps for workload risk, model routes, review, escalation, audit, and cost expectations.
+- Deterministic migration plans and bounded local-only ontology modules.
 - Local-first operation with no telemetry, network calls, database, server, cloud account, or AI model requirement.
 
 ## Installation
@@ -46,6 +53,10 @@ openontology digest examples/customer_support.yaml
 openontology export-json-schema examples/customer_support.yaml --output build/customer-support.schema.json
 openontology export-mermaid examples/customer_support.yaml --output build/customer-support.mmd
 openontology docs examples/customer_support.yaml --output build/customer-support.md
+openontology entity validate examples/customer_support.yaml Customer examples/data/customer.json --json
+openontology action check examples/customer_support.yaml create_ticket examples/data/create_ticket.json -p support.ticket.create --json
+openontology contract tool examples/customer_support.yaml create_ticket
+openontology migration-plan old.yaml new.yaml --format markdown
 ```
 
 AI workload mapping:
@@ -82,12 +93,27 @@ entities:
 ## Python API
 
 ```python
-from open_ontology_lite import load_ontology, validate_ontology, ontology_digest
+from open_ontology_lite import (
+    check_action_contract,
+    generate_tool_contract,
+    load_ontology,
+    validate_entity_instance,
+)
 
 ontology = load_ontology("examples/customer_support.yaml")
-report = validate_ontology(ontology)
-print(report.ok)
-print(ontology_digest(ontology))
+entity = validate_entity_instance(
+    ontology,
+    entity_type="Customer",
+    value={"customer_id": "C-1042"},
+)
+action = check_action_contract(
+    ontology,
+    action="create_ticket",
+    inputs={"customer_id": "C-1042", "description": "Cannot sign in"},
+    actor_permissions=["support.ticket.create"],
+)
+tool = generate_tool_contract(ontology, "create_ticket")
+print(entity.valid, action.status, tool.name)
 ```
 
 ## Validation Example
@@ -139,11 +165,18 @@ tasks:
 
 ## Ecosystem Position
 
-OpenOntologyLite is designed to stand alone in the `0.1.0` alpha line. AI System Map integration entries describe portable integration patterns for AgentForge, PrivateAIStack, ModelSwapBench, AgentPolicyPack, AIAuditLog, and AIMeter OSS; they do not claim verified live integrations.
+OpenOntologyLite remains independently installable. Its neutral contracts can be consumed by
+adapters for AgentForge, PrivateAIStack, ModelSwapBench, AgentPolicyPack, AIAuditLog, and
+AIMeter OSS, but generation does not claim registration, execution, persistence, enforcement,
+ingestion, billing, or a verified live integration.
 
 ## Security Model
 
-Ontology and AI System Map files are untrusted input. The package uses bounded regular-file reads, safe YAML loading, duplicate-key rejection, parsed-node and nesting limits, non-executing preconditions, deterministic serialization, sanitized diagnostics, and escaping for terminal, Markdown, and Mermaid outputs. CLI export commands validate inputs before generating derived artifacts. OpenOntologyLite does not resolve remote schema references or execute expressions.
+Ontology, module, AI System Map, entity, and action files are untrusted input. The package uses
+bounded regular-file reads, symlink rejection, safe YAML loading, duplicate-key rejection,
+graph, parsed-node, collection, string, nesting, and diagnostic limits, non-executing
+preconditions, deterministic serialization, and sanitized diagnostics. It does not resolve
+remote imports or schema references, execute expressions, or run shell commands.
 
 ## Limitations
 
@@ -153,11 +186,14 @@ Ontology and AI System Map files are untrusted input. The package uses bounded r
 - No database synchronization.
 - No graphical editor.
 - No action execution.
-- No authorization enforcement.
+- No final authorization or policy-enforcement decisions.
 - Preconditions are declarative text only.
 - No remote schema resolution.
 - No hosted service.
 - AI System Maps document intended controls but do not execute routing, review, audit, or cost enforcement.
+- Neutral contracts do not register Forge tools, write audit records, calculate invoices or
+  realized savings, execute benchmarks, or ingest RAG documents.
+- No compliance certification.
 - Diff classification is rule-based and conservative.
 - JSON Schema export may be lossy for ontology-specific semantics.
 - Relationship cycles are reported but not automatically invalid.
@@ -165,31 +201,21 @@ Ontology and AI System Map files are untrusted input. The package uses bounded r
 
 ## Roadmap
 
-Current alpha, `0.1.0a3`:
+Current alpha, `0.1.0a4`:
 
-- Added typed AI System Maps for tasks, entities, risk, model routes, review, escalation, audit, and cost/outcome expectations.
-- Added deterministic Markdown reports, Mermaid rendering, canonical digesting, and public Python APIs.
-- Added `openontology ai-map validate`, `report`, and `render`.
-- Added a fictional customer-support AI workload example.
-- Hardened bounded loading, duplicate-key handling, diagnostics, terminal output, and validation issue retention.
+- Added runtime entity and action validation, neutral ecosystem contracts, action schemas, and
+  deterministic migration planning.
+- Expanded AI System Maps and added safe local module foundations with provenance.
 
 Next alpha:
 
-- Additional exporters.
-- Stronger resource-limit configuration.
-- More detailed migration hints.
-- Forge adapter.
-- ModelSwapBench fixtures.
-- PrivateAIStack RAG metadata.
-- Policy hooks for AgentPolicyPack.
+- Additional contract adapters and resource-limit configuration.
+- Broader local module composition and schema packaging.
 
 Later, `0.2`:
 
 - Optional SQLite catalog.
-- Ontology package imports.
-- Modular namespaces.
 - Signed manifests.
-- Provenance metadata.
 
 ## Contributing
 

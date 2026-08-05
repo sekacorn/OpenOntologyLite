@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.1.0a4 - 2026-08-04
+
+- Added bounded runtime entity-instance validation with aliases, defaults, nested values, references, safe decimal handling, and deterministic diagnostics.
+- Added non-enforcing action-contract checks with input and output validation, permission gaps, unresolved preconditions, risk, review, escalation, audit expectations, and evidence paths.
+- Added versioned neutral tool, policy, audit, meter, benchmark, and RAG handoff contracts with common ontology provenance.
+- Added deterministic action JSON Schemas and machine-readable JSON and Markdown migration plans.
+- Expanded AI System Maps with optional data, model, tool, review, retention, deployment, ontology-reference, and provenance fields.
+- Added bounded local-only ontology imports with cycle, boundary, version, digest, namespace, conflict, and symlink defenses.
+- Added runtime, contract, migration, and local-module CLI commands and a complete offline example.
+
 ## 0.1.0a3 - 2026-07-26
 
 - Added typed AI System Maps with semantic validation, deterministic Markdown reports, Mermaid rendering, and nested CLI commands.

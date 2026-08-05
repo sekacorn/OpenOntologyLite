@@ -4,7 +4,7 @@ OpenOntologyLite treats ontology files as untrusted input.
 
 ## Supported Version
 
-`0.1.0a3` is an alpha release. Security reports are welcome for the current alpha line.
+`0.1.0a4` is an alpha release. Security reports are welcome for the current alpha line.
 
 ## Threat Model
 

@@ -74,6 +74,18 @@ tasks:
     policy_tags: [approved-knowledge-only, no-account-change]
     expected_audit_events: [route_selected, guidance_drafted]
     expected_metrics: [input_tokens, output_tokens, estimated_cost, resolution_outcome]
+    data_sources: [approved support knowledge]
+    retrieval_boundaries: [password-reset articles only]
+    models: [candidate support model, baseline support model]
+    agent_roles: [support assistant]
+    tool_access: [knowledge search]
+    ontology_entities: [SupportTicket]
+    ontology_actions: [create_ticket]
+    ontology_permissions: [support.ticket.create]
+    data_handling_expectations: [Use only the minimum fictional account context.]
+    known_failure_modes: [Outdated guidance may require operator review.]
+    data_retention: Follow the support ticket retention policy.
+    provenance: {example: fictional customer-support map}
 
   - name: InternalSummary
     description: Summarize a support request for an operator.
@@ -148,6 +160,10 @@ tasks:
     policy_tags: [security-response, minimum-context]
     expected_audit_events: [route_selected, security_escalation_created, reviewer_disposition]
     expected_metrics: [input_tokens, output_tokens, estimated_cost, escalation_outcome]
+    data_handling_expectations:
+      - Minimize account details and send incident context only to the security review path.
+    deployment_restrictions: [No autonomous incident response.]
+    human_review_points: [Security reviewer disposition.]
 
   - name: LegalQuestion
     description: Block automated legal advice and route the question for qualified review.
@@ -161,6 +177,10 @@ tasks:
     policy_tags: [no-legal-advice]
     expected_audit_events: [route_selected, legal_escalation_created]
     expected_metrics: [input_tokens, output_tokens, estimated_cost, escalation_outcome]
+    data_handling_expectations:
+      - Minimize customer context and restrict access to the qualified legal review path.
+    geographic_restrictions: [Apply the deployment jurisdiction policy.]
+    human_review_points: [Qualified legal review.]
 
   - name: MedicalQuestion
     description: Block automated medical advice and route the question for qualified review.
@@ -174,6 +194,10 @@ tasks:
     policy_tags: [no-medical-advice]
     expected_audit_events: [route_selected, medical_escalation_created]
     expected_metrics: [input_tokens, output_tokens, estimated_cost, escalation_outcome]
+    data_handling_expectations:
+      - Do not retain health details beyond the controlled support record.
+    deployment_restrictions: [No automated medical advice.]
+    human_review_points: [Qualified review or do-not-answer disposition.]
 
   - name: FinancialQuestion
     description: Block automated financial advice and route the request for qualified review.
@@ -187,6 +211,10 @@ tasks:
     policy_tags: [no-financial-advice]
     expected_audit_events: [route_selected, financial_escalation_created]
     expected_metrics: [input_tokens, output_tokens, estimated_cost, escalation_outcome]
+    data_handling_expectations:
+      - Minimize financial context and restrict it to the compliance review path.
+    deployment_restrictions: [No automated financial advice.]
+    human_review_points: [Compliance reviewer disposition.]
 
 integrations:
   - tool: ModelSwapBench

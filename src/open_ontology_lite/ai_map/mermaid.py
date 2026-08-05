@@ -30,8 +30,10 @@ def ai_system_map_mermaid(ai_map: AISystemMap) -> str:
     for index, task in enumerate(ai_map.tasks, start=1):
         node_id = f"task_{index:04d}"
         task_node_ids.append(node_id)
+        review = "<br/>Review: required" if task.human_review_required else ""
         lines.append(
-            f'  {node_id}["Task: {mermaid(task.name)}<br/>Risk: {mermaid(task.risk_level)}"]'
+            f'  {node_id}["Task: {mermaid(task.name)}<br/>'
+            f'Risk: {mermaid(task.risk_level)}{review}"]'
         )
         lines.append(f"  system --> {node_id}")
 

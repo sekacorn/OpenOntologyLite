@@ -6,20 +6,51 @@ import json
 from decimal import Decimal
 from typing import Any
 
-from open_ontology_lite.models import Ontology, PropertyDef
+from open_ontology_lite.models import ActionDef, Ontology, PropertyDef
+from open_ontology_lite.normalization import ontology_digest
 
 
-def _property_schema(prop: PropertyDef) -> dict[str, Any]:
+def property_schema(prop: PropertyDef) -> dict[str, Any]:
+    """Convert a property definition to bounded JSON Schema 2020-12 vocabulary."""
+
     if prop.type == "reference":
-        schema: dict[str, Any] = {"$ref": f"#/$defs/{prop.target}"}
+        choices: list[dict[str, Any]] = [
+            {"type": "string", "minLength": 1},
+            {"type": "integer"},
+        ]
+        choices.append({"$ref": f"#/$defs/{prop.target}"} if prop.target else {"type": "object"})
+        schema: dict[str, Any] = {"anyOf": choices}
     elif prop.type == "array":
-        schema = {"type": "array", "items": {"type": prop.items or "string"}}
+        item = prop.items_schema or PropertyDef(type=prop.items or "string")
+        schema = {"type": "array", "items": property_schema(item)}
     elif prop.type == "object":
-        schema = {"type": "object", "additionalProperties": True}
+        nested = {name: property_schema(prop.properties[name]) for name in sorted(prop.properties)}
+        schema = {
+            "type": "object",
+            "additionalProperties": not bool(prop.properties),
+            "properties": nested,
+        }
+        required = sorted(name for name, item in prop.properties.items() if item.required)
+        if required:
+            schema["required"] = required
     elif prop.type == "integer":
         schema = {"type": "integer"}
-    elif prop.type in {"number", "decimal"}:
+    elif prop.type == "number":
         schema = {"type": "number"}
+    elif prop.type == "decimal":
+        schema = {
+            "anyOf": [
+                {"type": "integer"},
+                {
+                    "type": "string",
+                    "pattern": (
+                        r"^\s*-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?"
+                        r"(?:[eE][+-]?[0-9]+)?\s*$"
+                    ),
+                },
+            ],
+            "x-exact-decimal": True,
+        }
     elif prop.type == "boolean":
         schema = {"type": "boolean"}
     else:
@@ -35,6 +66,8 @@ def _property_schema(prop: PropertyDef) -> dict[str, Any]:
             schema = {"anyOf": [schema, {"type": "null"}]}
         elif "type" in schema:
             schema["type"] = [schema["type"], "null"]
+        elif "anyOf" in schema:
+            schema["anyOf"].append({"type": "null"})
     if prop.description:
         schema["description"] = prop.description
     if prop.enum is not None:
@@ -42,9 +75,11 @@ def _property_schema(prop: PropertyDef) -> dict[str, Any]:
     if prop.pattern:
         schema["pattern"] = prop.pattern
     if prop.minimum is not None:
-        schema["minimum"] = float(prop.minimum)
+        key = "x-minimum" if prop.type == "decimal" else "minimum"
+        schema[key] = str(prop.minimum) if prop.type == "decimal" else float(prop.minimum)
     if prop.maximum is not None:
-        schema["maximum"] = float(prop.maximum)
+        key = "x-maximum" if prop.type == "decimal" else "maximum"
+        schema[key] = str(prop.maximum) if prop.type == "decimal" else float(prop.maximum)
     if prop.min_length is not None:
         key = "minItems" if prop.type == "array" else "minLength"
         schema[key] = prop.min_length
@@ -67,7 +102,7 @@ def entity_schema(ontology: Ontology, entity_name: str) -> dict[str, Any]:
 
     entity = ontology.entities[entity_name]
     properties = {
-        name: _property_schema(entity.properties[name]) for name in sorted(entity.properties)
+        name: property_schema(entity.properties[name]) for name in sorted(entity.properties)
     }
     required = sorted(name for name, prop in entity.properties.items() if prop.required)
     schema: dict[str, Any] = {
@@ -83,6 +118,62 @@ def entity_schema(ontology: Ontology, entity_name: str) -> dict[str, Any]:
     if required:
         schema["required"] = required
     return schema
+
+
+def action_input_schema(ontology: Ontology, action: ActionDef | str) -> dict[str, Any]:
+    """Export one action's inputs as a deterministic JSON Schema document."""
+
+    contract = (
+        next(item for item in ontology.actions if item.name == action)
+        if isinstance(action, str)
+        else action
+    )
+    properties = {name: property_schema(contract.inputs[name]) for name in sorted(contract.inputs)}
+    required = sorted(name for name, item in contract.inputs.items() if item.required)
+    schema: dict[str, Any] = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": f"{ontology.ontology.namespace}.actions.{contract.name}.inputs",
+        "title": f"{contract.name} inputs",
+        "type": "object",
+        "additionalProperties": False,
+        "properties": properties,
+        "$defs": {name: entity_schema(ontology, name) for name in sorted(ontology.entities)},
+        "x-ontology": {
+            "id": ontology.ontology.id,
+            "version": ontology.ontology.version,
+            "namespace": ontology.ontology.namespace,
+            "digest": ontology_digest(ontology),
+        },
+    }
+    if contract.description:
+        schema["description"] = contract.description
+    if required:
+        schema["required"] = required
+    return schema
+
+
+def action_output_schema(ontology: Ontology, action: ActionDef | str) -> dict[str, Any] | None:
+    """Export one action's output contract when it is representable."""
+
+    contract = (
+        next(item for item in ontology.actions if item.name == action)
+        if isinstance(action, str)
+        else action
+    )
+    if contract.output is None:
+        return None
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": f"{ontology.ontology.namespace}.actions.{contract.name}.output",
+        **property_schema(contract.output),
+        "$defs": {name: entity_schema(ontology, name) for name in sorted(ontology.entities)},
+        "x-ontology": {
+            "id": ontology.ontology.id,
+            "version": ontology.ontology.version,
+            "namespace": ontology.ontology.namespace,
+            "digest": ontology_digest(ontology),
+        },
+    }
 
 
 def combined_schema(ontology: Ontology, entity: str | None = None) -> dict[str, Any]:

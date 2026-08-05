@@ -31,3 +31,7 @@ class UnsafeInputError(OpenOntologyLiteError):
 
 class UnsupportedSchemaVersionError(OntologyValidationError):
     """Raised when the ontology schema version is unsupported."""
+
+
+class ModuleResolutionError(OpenOntologyLiteError):
+    """Raised when a local ontology import graph cannot be resolved safely."""

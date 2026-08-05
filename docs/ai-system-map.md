@@ -13,6 +13,9 @@ The `1.0` schema records:
 - risk levels: `low`, `medium`, `high`, `regulated`, and `unknown`;
 - human-review and escalation requirements;
 - expected audit events and cost metrics;
+- data sources, retrieval boundaries, models, fallbacks, agent roles, and tool access;
+- review points, failure modes, retention, deployment and geographic restrictions;
+- policy, integration-contract, ontology, and provenance references;
 - portable integration-pattern meaning; and
 - explicit limitations.
 
@@ -26,7 +29,11 @@ openontology ai-map validate examples/ai_system_map/customer_support_ai.yaml --j
 openontology ai-map validate examples/ai_system_map/customer_support_ai.yaml --strict
 ```
 
-Validation checks stable names and references, known risk and route values, sensitive-task controls, high-risk candidate routes, and declared audit and cost expectations. High-risk candidate routing without review or justification produces a warning; regulated candidate routing without those controls is an error.
+Validation checks stable names and references, known risk and route values, sensitive-task
+controls and handling expectations, review and escalation paths, high-risk candidate routes,
+declared audit and cost expectations, and optional ontology entity, action, and permission
+references. High or unknown-risk candidate routing without review or justification produces a
+warning; regulated candidate routing without those controls is an error.
 
 ## Report
 
@@ -36,7 +43,9 @@ openontology ai-map report examples/ai_system_map/customer_support_ai.yaml `
   --output build/customer-support-ai.md
 ```
 
-The report includes the system summary, entities, tasks and route distributions, review requirements, audit and cost expectations, integration patterns, warnings, limitations, and a canonical SHA-256 digest. No generation timestamp is added, so repeated runs are deterministic.
+The report includes data, model, tool, deployment, and handling boundaries in addition to the
+system summary, tasks, routes, review, audit, cost, integrations, warnings, limitations, and
+canonical SHA-256 digest. No generation timestamp is added.
 
 ## Render
 
