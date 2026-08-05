@@ -22,7 +22,7 @@ from open_ontology_lite.errors import OpenOntologyLiteError
 from open_ontology_lite.exporters import json_schema_text, markdown_docs, mermaid_text
 from open_ontology_lite.exporters.escaping import plain
 from open_ontology_lite.inspection import inspect_ontology
-from open_ontology_lite.loading import load_ontology, load_raw
+from open_ontology_lite.loading import load_ontology, load_raw, load_value
 from open_ontology_lite.migrations import (
     build_migration_plan,
     migration_plan_json,
@@ -74,10 +74,16 @@ def _fail(exc: Exception, *, debug: bool = False) -> NoReturn:
     raise typer.Exit(2)
 
 
-def _write(text: str, output: Path | None) -> None:
+def _write(text: str, output: Path | None, *, sources: tuple[Path, ...] = ()) -> None:
     if output is None:
         typer.echo(text, nl=False)
         return
+    # Refuse aliases and input collisions before writing generated content.
+    if output.is_symlink():
+        raise typer.BadParameter("Output files must not be symbolic links.", param_hint="--output")
+    output_path = output.resolve(strict=False)
+    if any(output_path == source.resolve(strict=False) for source in sources):
+        raise typer.BadParameter("Output must not overwrite an input file.", param_hint="--output")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(text, encoding="utf-8")
 
@@ -99,6 +105,13 @@ def _load_ai_map(path: Path, debug: bool = False) -> AISystemMap:
 def _load_data(path: Path, debug: bool = False) -> dict[str, object]:
     try:
         return load_raw(path)
+    except OpenOntologyLiteError as exc:
+        _fail(exc, debug=debug)
+
+
+def _load_value(path: Path, debug: bool = False) -> object:
+    try:
+        return load_value(path)
     except OpenOntologyLiteError as exc:
         _fail(exc, debug=debug)
 
@@ -170,15 +183,28 @@ def action_check(
 ) -> None:
     """Check a proposed invocation without making an authorization decision."""
 
-    result = check_action_contract(
-        _load(ontology_file, debug),
-        action=action_name,
-        inputs=_load_data(inputs, debug),
-        actor_permissions=permissions or (),
-        context=_load_data(context, debug) if context else None,
-        output=_load_data(output_value, debug) if output_value else None,
-        strict=not non_strict,
-    )
+    ontology = _load(ontology_file, debug)
+    action_inputs = _load_data(inputs, debug)
+    action_context = _load_data(context, debug) if context else None
+    if output_value is None:
+        result = check_action_contract(
+            ontology,
+            action=action_name,
+            inputs=action_inputs,
+            actor_permissions=permissions or (),
+            context=action_context,
+            strict=not non_strict,
+        )
+    else:
+        result = check_action_contract(
+            ontology,
+            action=action_name,
+            inputs=action_inputs,
+            actor_permissions=permissions or (),
+            context=action_context,
+            output=_load_value(output_value, debug),
+            strict=not non_strict,
+        )
     _write(
         json.dumps(result.to_dict(), sort_keys=True, indent=2) + "\n"
         if json_output
@@ -208,7 +234,11 @@ def contract_tool(
         contract = generate_tool_contract(_load(ontology_file, debug), action_name)
     except KeyError as exc:
         _fail(exc, debug=debug)
-    _write(json.dumps(contract.to_dict(), sort_keys=True, indent=2) + "\n", output)
+    _write(
+        json.dumps(contract.to_dict(), sort_keys=True, indent=2) + "\n",
+        output,
+        sources=(ontology_file,),
+    )
 
 
 def _require_valid(ontology: Ontology) -> None:
@@ -301,7 +331,11 @@ def ai_map_report_cmd(
     ai_map = _load_ai_map(file, debug)
     _require_valid_ai_map(ai_map, fail_on_warning=fail_on_warning)
     result = validate_ai_system_map(ai_map)
-    _write(ai_system_map_report(ai_map, validation=result, source=file.name), output)
+    _write(
+        ai_system_map_report(ai_map, validation=result, source=file.name),
+        output,
+        sources=(file,),
+    )
 
 
 @ai_map_app.command("render")
@@ -332,7 +366,7 @@ def ai_map_render(
         raise typer.Exit(2)
     ai_map = _load_ai_map(file, debug)
     _require_valid_ai_map(ai_map, fail_on_warning=fail_on_warning)
-    _write(ai_system_map_mermaid(ai_map), output)
+    _write(ai_system_map_mermaid(ai_map), output, sources=(file,))
 
 
 @app.command()
@@ -405,7 +439,7 @@ def normalize(
 ) -> None:
     """Emit canonical normalized JSON."""
 
-    _write(canonical_json(_load(file, debug)), output)
+    _write(canonical_json(_load(file, debug)), output, sources=(file,))
 
 
 @app.command()
@@ -462,7 +496,7 @@ def export_json_schema(
     if entity and entity not in ontology.entities:
         typer.echo(f"Unknown entity: {plain(entity)}", err=True)
         raise typer.Exit(2)
-    _write(json_schema_text(ontology, entity), output)
+    _write(json_schema_text(ontology, entity), output, sources=(file,))
 
 
 @app.command("export-mermaid")
@@ -485,6 +519,7 @@ def export_mermaid(
     _write(
         mermaid_text(ontology, detailed=detailed and not compact, include_actions=actions),
         output,
+        sources=(file,),
     )
 
 
@@ -510,6 +545,7 @@ def docs_cmd(
             ontology, validation=validate_ontology(ontology), include_timestamp=include_timestamp
         ),
         output,
+        sources=(file,),
     )
 
 
@@ -535,7 +571,7 @@ def diff(
         if json_output
         else diff_text(result)
     )
-    _write(text, output)
+    _write(text, output, sources=(old_file, new_file))
     if result.breaking_count:
         raise typer.Exit(1)
 
@@ -565,7 +601,7 @@ def migration_plan(
     else:
         typer.echo("Unsupported migration-plan format. Use json or markdown.", err=True)
         raise typer.Exit(2)
-    _write(text, output)
+    _write(text, output, sources=(old_file, new_file))
 
 
 def run() -> None:

@@ -105,7 +105,7 @@ class AITask(AIStrictModel):
     ontology_permissions: StringTuple = Field(default=(), max_length=100)
     data_handling_expectations: TextTuple = Field(default=(), max_length=100)
     escalation_required: bool = False
-    provenance: dict[str, str] = Field(default_factory=dict)
+    provenance: dict[ShortString, LongString] = Field(default_factory=dict, max_length=100)
     candidate_route_justification: str | None = Field(default=None, max_length=2_000)
     notes: str | None = Field(default=None, max_length=2_000)
 

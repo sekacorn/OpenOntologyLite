@@ -137,6 +137,40 @@ def test_regulated_risk_requires_review_blocking_or_escalation() -> None:
     assert "SENSITIVE_TASK_CONTROL_REQUIRED" in {issue.code for issue in result.errors}
 
 
+def test_sensitive_related_entity_requires_handling_expectations() -> None:
+    ai_map = load_ai_system_map(EXAMPLE)
+    sensitive_entity = ai_map.entities[0].model_copy(update={"sensitivity": "restricted"})
+    task = ai_map.tasks[0].model_copy(
+        update={
+            "category": "general",
+            "risk_level": "low",
+            "related_entities": (sensitive_entity.name,),
+            "allowed_routes": ("baseline_model",),
+            "human_review_required": False,
+            "escalation": (),
+            "data_handling_expectations": (),
+        }
+    )
+    result = validate_ai_system_map(
+        ai_map.model_copy(update={"entities": (sensitive_entity,), "tasks": (task,)})
+    )
+    assert "SENSITIVE_DATA_HANDLING_REQUIRED" in {issue.code for issue in result.warnings}
+
+
+def test_non_human_escalation_does_not_satisfy_human_review() -> None:
+    ai_map = load_ai_system_map(EXAMPLE)
+    task = ai_map.tasks[0].model_copy(
+        update={
+            "human_review_required": True,
+            "human_review_points": (),
+            "allowed_routes": ("baseline_model",),
+            "escalation": ("do_not_answer",),
+        }
+    )
+    result = validate_ai_system_map(ai_map.model_copy(update={"tasks": (task,)}))
+    assert "HUMAN_REVIEW_PATH_REQUIRED" in {issue.code for issue in result.errors}
+
+
 @pytest.mark.parametrize(
     ("suffix", "content"),
     [

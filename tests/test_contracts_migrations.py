@@ -23,7 +23,7 @@ from open_ontology_lite import (
 )
 from open_ontology_lite.diffing import diff_ontologies
 from open_ontology_lite.migrations import migration_plan_json, migration_plan_markdown
-from open_ontology_lite.models import Ontology
+from open_ontology_lite.models import Ontology, PropertyDef
 
 ROOT = Path(__file__).parents[1]
 
@@ -317,3 +317,58 @@ def test_empty_migration_plan_is_patch() -> None:
     assert plan.steps == ()
     assert plan.suggested_version_impact == "patch"
     assert "No migration steps are required." in migration_plan_markdown(plan)
+
+
+def test_diff_handles_structured_enums_and_migration_paths() -> None:
+    old = _migration_ontology(False)
+    new = _migration_ontology(True)
+    old_shared = old.entities["Shared"]
+    new_shared = new.entities["Shared"]
+    old_entities = dict(old.entities)
+    new_entities = dict(new.entities)
+    old_entities["Shared"] = old_shared.model_copy(
+        update={
+            "properties": {
+                **old_shared.properties,
+                "choice": old_shared.properties["legacy"].model_copy(
+                    update={"enum": ({"kind": ["shared"]}, "old")}
+                ),
+            }
+        }
+    )
+    new_entities["Shared"] = new_shared.model_copy(
+        update={
+            "properties": {
+                **new_shared.properties,
+                "choice": new_shared.properties["current"].model_copy(
+                    update={"enum": ({"kind": ["shared"]}, "new")}
+                ),
+            }
+        }
+    )
+    renamed = new.entities["Customer"].model_copy(
+        update={"aliases": ("HistoricalCustomer", "OldCustomer")}
+    )
+    new_entities["Customer"] = renamed
+    old = old.model_copy(update={"entities": old_entities})
+    new = new.model_copy(update={"entities": new_entities})
+
+    result = diff_ontologies(old, new)
+    assert {"ENUM_VALUE_ADDED", "ENUM_VALUE_REMOVED"} <= {change.code for change in result.changes}
+    plan = build_migration_plan(old, new)
+    entity_rename = next(step for step in plan.steps if step.code == "ENTITY_RENAMED")
+    assert entity_rename.old_path == "entities.OldCustomer"
+    enum_steps = [step for step in plan.steps if step.code.startswith("ENUM_VALUE_")]
+    assert enum_steps
+    assert all(step.old_path == step.new_path for step in enum_steps)
+
+
+def test_required_action_input_with_explicit_default_is_not_reported_optional() -> None:
+    old = _contract_ontology()
+    action = old.actions[0]
+    new_input = PropertyDef(type="string", required=True, nullable=True, default=None)
+    changed_action = action.model_copy(update={"inputs": {**action.inputs, "new_input": new_input}})
+    new = old.model_copy(update={"actions": (changed_action, *old.actions[1:])})
+    codes = {change.code for change in diff_ontologies(old, new).changes}
+    assert "REQUIRED_ACTION_INPUT_ADDED_WITH_DEFAULT" in codes
+    assert "OPTIONAL_ACTION_INPUT_ADDED" not in codes

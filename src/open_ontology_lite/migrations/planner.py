@@ -21,6 +21,7 @@ _RENAME_CODES = {
 _AUTOMATABLE_CODES = _RENAME_CODES | {
     "OPTIONAL_PROPERTY_ADDED",
     "REQUIRED_PROPERTY_ADDED_WITH_DEFAULT",
+    "REQUIRED_ACTION_INPUT_ADDED_WITH_DEFAULT",
 }
 _UNSAFE_CODES = {
     "ENTITY_REMOVED",
@@ -36,6 +37,26 @@ _UNSAFE_CODES = {
     "ACTION_OUTPUT_CHANGED",
     "PERMISSION_REMOVED",
     "ONTOLOGY_ID_CHANGED",
+}
+_DECLARATION_REMOVALS = {
+    "ENTITY_REMOVED",
+    "PROPERTY_REMOVED",
+    "RELATIONSHIP_REMOVED",
+    "ACTION_REMOVED",
+    "ACTION_INPUT_REMOVED",
+    "PERMISSION_REMOVED",
+}
+_DECLARATION_ADDITIONS = {
+    "ENTITY_ADDED",
+    "OPTIONAL_PROPERTY_ADDED",
+    "REQUIRED_PROPERTY_ADDED",
+    "REQUIRED_PROPERTY_ADDED_WITH_DEFAULT",
+    "RELATIONSHIP_ADDED",
+    "ACTION_ADDED",
+    "OPTIONAL_ACTION_INPUT_ADDED",
+    "REQUIRED_ACTION_INPUT_ADDED",
+    "REQUIRED_ACTION_INPUT_ADDED_WITH_DEFAULT",
+    "PERMISSION_ADDED",
 }
 
 
@@ -61,32 +82,47 @@ def _rename_paths(
     new_path = change.path
     if change.code == "ENTITY_RENAMED":
         new_name = new_path.split(".")[1]
-        aliases = new.entities[new_name].aliases
-        return f"entities.{aliases[0]}" if aliases else None, f"entities.{new_name}"
+        removed_names = set(old.entities) - set(new.entities)
+        old_name = next(
+            (name for name in sorted(removed_names) if name in new.entities[new_name].aliases),
+            None,
+        )
+        return f"entities.{old_name}" if old_name else None, f"entities.{new_name}"
     if change.code == "PROPERTY_RENAMED":
         parts = new_path.split(".")
         new_name = parts[3]
         aliases = new.entities[parts[1]].properties[new_name].aliases
-        old_name = aliases[0] if aliases else None
+        old_properties = set(old.entities[parts[1]].properties)
+        new_properties = set(new.entities[parts[1]].properties)
+        old_name = next(
+            (name for name in sorted(old_properties - new_properties) if name in aliases),
+            None,
+        )
         old_path = f"entities.{parts[1]}.properties.{old_name}" if old_name else None
         return old_path, ".".join(parts[:4])
     if change.code == "RELATIONSHIP_RENAMED":
         new_name = new_path.split(".")[1]
         relation = next(item for item in new.relationships if item.name == new_name)
-        return (
-            f"relationships.{relation.aliases[0]}" if relation.aliases else None,
-            f"relationships.{new_name}",
+        old_names = {item.name for item in old.relationships}
+        new_names = {item.name for item in new.relationships}
+        old_name = next(
+            (name for name in sorted(old_names - new_names) if name in relation.aliases), None
         )
+        return f"relationships.{old_name}" if old_name else None, f"relationships.{new_name}"
     if change.code == "ACTION_RENAMED":
         new_name = new_path.split(".")[1]
         action = next(item for item in new.actions if item.name == new_name)
-        return (
-            f"actions.{action.aliases[0]}" if action.aliases else None,
-            f"actions.{new_name}",
+        old_names = {item.name for item in old.actions}
+        new_names = {item.name for item in new.actions}
+        old_name = next(
+            (name for name in sorted(old_names - new_names) if name in action.aliases), None
         )
-    if change.code.endswith("_REMOVED"):
+        return f"actions.{old_name}" if old_name else None, f"actions.{new_name}"
+    # Value-level enum changes keep the same declaration path; only exact
+    # declaration changes may omit one side of a migration step.
+    if change.code in _DECLARATION_REMOVALS:
         return change.path, None
-    if change.code.endswith("_ADDED") or "_ADDED_" in change.code:
+    if change.code in _DECLARATION_ADDITIONS:
         return None, change.path
     return change.path, change.path
 

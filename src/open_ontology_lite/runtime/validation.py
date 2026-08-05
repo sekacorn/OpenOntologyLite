@@ -19,6 +19,7 @@ from open_ontology_lite.runtime.models import (
 )
 
 _UNSAFE_PATTERN = re.compile(r"[()|]|\\[1-9]")
+_PATTERN_QUANTIFIER = re.compile(r"(?<!\\)[*+?]|\{\d+(?:,\d*)?\}")
 _UNSET = object()
 
 
@@ -31,7 +32,9 @@ class RuntimeLimits:
     max_string_length: int = 100_000
     max_pattern_input: int = 4_096
     max_pattern_length: int = 256
+    max_pattern_quantifiers: int = 4
     max_issues: int = 1_000
+    max_total_nodes: int = 100_000
 
 
 class _Collector:
@@ -85,6 +88,26 @@ class _ValidationState:
     strict: bool
     aliases_required: bool = False
     defaults_required: bool = False
+    visited_nodes: int = 0
+    nodes_exhausted: bool = False
+
+    def reserve_nodes(self, count: int, path: str) -> bool:
+        """Reserve aggregate work before iterating another untrusted container."""
+
+        if self.nodes_exhausted:
+            return False
+        if self.visited_nodes + count > self.collector.limits.max_total_nodes:
+            self.nodes_exhausted = True
+            self.collector.add(
+                "error",
+                "TOTAL_NODE_LIMIT_EXCEEDED",
+                "Runtime value exceeds the aggregate node limit.",
+                path,
+                context={"limit": self.collector.limits.max_total_nodes},
+            )
+            return False
+        self.visited_nodes += count
+        return True
 
 
 def _context(value: Any) -> dict[str, Any]:
@@ -117,6 +140,18 @@ def _decimal(value: Any, *, allow_float: bool) -> Decimal | None:
     return candidate if candidate.is_finite() else None
 
 
+def _number(value: Any) -> int | float | Decimal | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, Decimal):
+        return value if value.is_finite() else None
+    return None
+
+
 def _primitive(prop: PropertyDef, value: Any, path: str, state: _ValidationState) -> Any:
     if value is None:
         if prop.nullable:
@@ -132,7 +167,7 @@ def _primitive(prop: PropertyDef, value: Any, path: str, state: _ValidationState
             return _type_error(prop, value, path, state)
         normalized = value
     elif prop.type in {"number", "decimal"}:
-        number = _decimal(value, allow_float=prop.type == "number")
+        number = _number(value) if prop.type == "number" else _decimal(value, allow_float=False)
         if number is None:
             code = (
                 "UNSAFE_DECIMAL_FLOAT"
@@ -213,9 +248,15 @@ def _validate_constraints(
             )
             return
         if prop.pattern:
-            if len(
-                prop.pattern
-            ) > state.collector.limits.max_pattern_length or _UNSAFE_PATTERN.search(prop.pattern):
+            # Python's regex engine has no timeout. Keep runtime matching to a
+            # deliberately small subset with bounded input and backtracking.
+            unsafe_pattern = (
+                len(prop.pattern) > state.collector.limits.max_pattern_length
+                or _UNSAFE_PATTERN.search(prop.pattern)
+                or len(_PATTERN_QUANTIFIER.findall(prop.pattern))
+                > state.collector.limits.max_pattern_quantifiers
+            )
+            if unsafe_pattern:
                 state.collector.add(
                     "error",
                     "UNSAFE_PATTERN",
@@ -249,10 +290,11 @@ def _validate_constraints(
             state.collector.add(
                 "error", "MAX_LENGTH", f"Length must be at most {prop.max_length}.", path
             )
-    if isinstance(value, (int, Decimal)) and not isinstance(value, bool):
-        if prop.minimum is not None and value < Decimal(str(prop.minimum)):
+    if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
+        comparable = value if isinstance(value, Decimal) else Decimal(str(value))
+        if prop.minimum is not None and comparable < Decimal(str(prop.minimum)):
             state.collector.add("error", "MINIMUM", f"Value must be at least {prop.minimum}.", path)
-        if prop.maximum is not None and value > Decimal(str(prop.maximum)):
+        if prop.maximum is not None and comparable > Decimal(str(prop.maximum)):
             state.collector.add("error", "MAXIMUM", f"Value must be at most {prop.maximum}.", path)
     if prop.enum is not None and value not in prop.enum:
         state.collector.add(
@@ -293,6 +335,63 @@ def _validate_reference(
     )
 
 
+def _normalize_untyped(value: Any, path: str, state: _ValidationState, depth: int) -> Any:
+    """Copy a generic object value while retaining runtime safety guarantees."""
+
+    if depth > state.collector.limits.max_depth:
+        state.collector.add(
+            "error", "MAX_DEPTH_EXCEEDED", "Runtime value exceeds the nesting limit.", path
+        )
+        return None
+    if isinstance(value, Mapping):
+        if not state.reserve_nodes(len(value), path):
+            return None
+        normalized: dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                state.collector.add(
+                    "error", "NON_STRING_PROPERTY", "Property names must be strings.", path
+                )
+                continue
+            normalized[key] = _normalize_untyped(item, f"{path}.<value>", state, depth + 1)
+        return dict(sorted(normalized.items()))
+    if isinstance(value, (list, tuple)):
+        if not state.reserve_nodes(len(value), path):
+            return None
+        return [
+            _normalize_untyped(item, f"{path}[{index}]", state, depth + 1)
+            for index, item in enumerate(value)
+            if not state.nodes_exhausted
+        ]
+    if isinstance(value, str):
+        if len(value) > state.collector.limits.max_string_length:
+            state.collector.add(
+                "error",
+                "STRING_LIMIT_EXCEEDED",
+                "String exceeds the runtime size limit.",
+                path,
+                context={"length": len(value), "limit": state.collector.limits.max_string_length},
+            )
+            return None
+        return value
+    if isinstance(value, float) and not math.isfinite(value):
+        state.collector.add("error", "NON_FINITE_NUMBER", "Number must be finite.", path)
+        return None
+    if isinstance(value, Decimal) and not value.is_finite():
+        state.collector.add("error", "NON_FINITE_NUMBER", "Number must be finite.", path)
+        return None
+    if value is None or isinstance(value, (bool, int, float, Decimal)):
+        return value
+    state.collector.add(
+        "error",
+        "UNSUPPORTED_VALUE",
+        "Generic object contains a value that cannot be normalized safely.",
+        path,
+        context=_context(value),
+    )
+    return None
+
+
 def _validate_property(
     prop: PropertyDef,
     value: Any,
@@ -312,7 +411,11 @@ def _validate_property(
             return None
         if not isinstance(value, Mapping):
             return _type_error(prop, value, path, state)
-        normalized = _validate_mapping(prop.properties, value, path, state, depth + 1)
+        normalized = (
+            _validate_mapping(prop.properties, value, path, state, depth + 1)
+            if prop.properties
+            else _normalize_untyped(value, path, state, depth + 1)
+        )
     elif prop.type == "array":
         if value is None and prop.nullable:
             return None
@@ -330,11 +433,16 @@ def _validate_property(
                 },
             )
             return None
+        if not state.reserve_nodes(len(value), path):
+            return None
         item_def = prop.items_schema or PropertyDef(type=prop.items or "string")
-        normalized = [
-            _validate_property(item_def, item, f"{path}[{index}]", state, depth + 1)
-            for index, item in enumerate(value)
-        ]
+        normalized = []
+        for index, item in enumerate(value):
+            if state.nodes_exhausted:
+                break
+            normalized.append(
+                _validate_property(item_def, item, f"{path}[{index}]", state, depth + 1)
+            )
         _validate_constraints(prop, normalized, path, state)
     else:
         normalized = _primitive(prop, value, path, state)
@@ -356,6 +464,8 @@ def _validate_mapping(
             path,
             context={"length": len(value), "limit": state.collector.limits.max_collection_items},
         )
+        return {}
+    if not state.reserve_nodes(len(value), path):
         return {}
     aliases: dict[str, str] = {}
     for canonical, definition in definitions.items():
@@ -509,6 +619,7 @@ def check_action_contract(
     contract = action_map[resolved_name]
     state = _ValidationState(ontology=ontology, collector=collector, strict=strict)
     validated_inputs = _validate_mapping(contract.inputs, inputs, "inputs", state, 0)
+    input_has_errors = any(issue.severity == "error" for issue in collector.issues)
     missing = tuple(sorted(set(contract.permissions) - set(actor_permissions)))
     for permission in missing:
         collector.add(
@@ -528,8 +639,10 @@ def check_action_contract(
             "Evaluate the precondition in a trusted policy or application runtime.",
         )
     validated_output: Any = None
+    output_unresolved = False
     if output is not _UNSET:
         if contract.output is None:
+            output_unresolved = True
             collector.add(
                 "warning",
                 "OUTPUT_CONTRACT_UNDECLARED",
@@ -541,7 +654,9 @@ def check_action_contract(
     issues = collector.finish()
     has_errors = any(issue.severity == "error" for issue in issues)
     status: ContractStatus = (
-        "unsatisfied" if has_errors else ("indeterminate" if unresolved else "satisfied")
+        "unsatisfied"
+        if has_errors
+        else ("indeterminate" if unresolved or output_unresolved else "satisfied")
     )
     evidence = (
         f"actions.{resolved_name}",
@@ -552,7 +667,7 @@ def check_action_contract(
         status=status,
         action=resolved_name,
         issues=issues,
-        validated_inputs=validated_inputs if not has_errors else None,
+        validated_inputs=validated_inputs if not input_has_errors else None,
         validated_output=validated_output,
         required_permissions=tuple(sorted(contract.permissions)),
         missing_permissions=missing,

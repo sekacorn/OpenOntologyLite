@@ -39,6 +39,7 @@ def _runtime_ontology():  # type: ignore[no-untyped-def]
             ),
             "age": PropertyDef(type="integer", minimum=0, maximum=120),
             "score": PropertyDef(type="number", minimum=0, maximum=1),
+            "ratio": PropertyDef(type="number", maximum=Decimal("0.1")),
             "amount": PropertyDef(type="decimal", minimum=0),
             "active": PropertyDef(type="boolean"),
             "day": PropertyDef(type="date"),
@@ -54,6 +55,7 @@ def _runtime_ontology():  # type: ignore[no-untyped-def]
                 type="object",
                 properties={"label": PropertyDef(type="string", required=True)},
             ),
+            "payload": PropertyDef(type="object"),
             "customer": PropertyDef(type="reference", target="Customer"),
             "optional": PropertyDef(type="string", nullable=True),
         }
@@ -142,6 +144,7 @@ def test_entity_primitive_formats_nested_values_and_references() -> None:
             "name": "Alice",
             "age": 42,
             "score": 0.5,
+            "ratio": 0.1,
             "amount": "10.25",
             "active": True,
             "day": "2026-01-02",
@@ -149,6 +152,7 @@ def test_entity_primitive_formats_nested_values_and_references() -> None:
             "identifier": "12345678-1234-5678-1234-567812345678",
             "tags": [1, 2],
             "profile": {"label": "primary"},
+            "payload": {"nested": [1, True, "value"]},
             "customer": "C-1",
             "optional": None,
         },
@@ -157,6 +161,7 @@ def test_entity_primitive_formats_nested_values_and_references() -> None:
     assert result.normalized_value is not None
     assert result.normalized_value["amount"] == Decimal("10.25")
     assert result.to_dict()["normalized_value"]["amount"] == "10.25"
+    assert result.normalized_value["payload"] == {"nested": [1, True, "value"]}
 
     expanded = validate_entity_instance(
         ontology,
@@ -200,6 +205,13 @@ def test_entity_rejects_invalid_types_formats_and_constraints() -> None:
         "EMPTY_REFERENCE",
     } <= _codes(result)
 
+    numeric_string = validate_entity_instance(
+        ontology,
+        entity_type="RuntimeData",
+        value={"name": "Alice", "score": "0.5"},
+    )
+    assert "TYPE_MISMATCH" in _codes(numeric_string)
+
 
 def test_entity_runtime_limits_and_sanitized_diagnostics() -> None:
     ontology = _runtime_ontology()
@@ -217,6 +229,14 @@ def test_entity_runtime_limits_and_sanitized_diagnostics() -> None:
     assert "DIAGNOSTIC_LIMIT_REACHED" in _codes(result)
     serialized = str(result.to_dict())
     assert "AAAAAA" not in serialized
+
+    aggregate = validate_entity_instance(
+        ontology,
+        entity_type="RuntimeData",
+        value={"name": "Alice", "payload": {"a": [1, 2, 3]}},
+        limits=RuntimeLimits(max_total_nodes=4),
+    )
+    assert "TOTAL_NODE_LIMIT_EXCEEDED" in _codes(aggregate)
 
 
 def test_entity_invalid_pattern_reference_and_default() -> None:
@@ -251,6 +271,8 @@ def test_action_contract_status_permissions_preconditions_and_metadata() -> None
     assert missing.review_required
     assert missing.escalation_expectations == ("manager_review",)
     assert missing.expected_audit_events == ("refund_checked",)
+    assert missing.validated_inputs is not None
+    assert missing.validated_inputs["amount"] == Decimal("12.00")
 
     checked = check_action_contract(
         ontology,
@@ -297,5 +319,5 @@ def test_action_contract_satisfied_output_and_failure_cases() -> None:
         actor_permissions=["support.ticket.create"],
         output={"ticket_id": "T-1"},
     )
-    assert undeclared_output.status == "satisfied"
+    assert undeclared_output.status == "indeterminate"
     assert "OUTPUT_CONTRACT_UNDECLARED" in _codes(undeclared_output)

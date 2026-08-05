@@ -97,6 +97,7 @@ tasks:
     policy_tags: [minimum-context, operator-assistance]
     expected_audit_events: [route_selected, summary_generated]
     expected_metrics: [input_tokens, output_tokens, estimated_cost, operator_outcome]
+    data_handling_expectations: [Use only the support details needed for the operator summary.]
 
   - name: RefundRequest
     description: Prepare a refund request for baseline handling and required human review.
@@ -110,6 +111,7 @@ tasks:
     policy_tags: [human-action-required, refund-control]
     expected_audit_events: [route_selected, review_requested, refund_disposition]
     expected_metrics: [input_tokens, output_tokens, estimated_cost, refund_outcome]
+    data_handling_expectations: [Limit refund context to the ticket, account, and authorized reviewer.]
 
   - name: BillingFAQ
     description: Answer a documented billing FAQ without changing an account or making a financial decision.
@@ -121,6 +123,7 @@ tasks:
     policy_tags: [approved-knowledge-only, no-account-change]
     expected_audit_events: [route_selected, answer_drafted, knowledge_reference_used]
     expected_metrics: [input_tokens, output_tokens, estimated_cost, resolution_outcome]
+    data_handling_expectations: [Use only the ticket context needed to answer the approved FAQ.]
 
   - name: AccountCancellation
     description: Prepare an account cancellation request for required human action.
@@ -134,6 +137,7 @@ tasks:
     policy_tags: [human-action-required]
     expected_audit_events: [route_selected, review_requested, account_action_disposition]
     expected_metrics: [input_tokens, output_tokens, estimated_cost, cancellation_outcome]
+    data_handling_expectations: [Restrict account details to the cancellation review workflow.]
 
   - name: AngryCustomerEscalation
     description: Recognize an escalation request and route it to a supervisor.
@@ -147,6 +151,7 @@ tasks:
     policy_tags: [de-escalation, no-autonomous-resolution]
     expected_audit_events: [route_selected, escalation_created, reviewer_disposition]
     expected_metrics: [input_tokens, output_tokens, estimated_cost, escalation_outcome]
+    data_handling_expectations: [Share only the ticket context needed by the assigned reviewer.]
 
   - name: SecurityConcern
     description: Stop ordinary automation and route potential security incidents for review.
