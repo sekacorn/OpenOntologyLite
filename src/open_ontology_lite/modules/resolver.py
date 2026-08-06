@@ -18,7 +18,8 @@ MAX_IMPORTS = 32
 MAX_IMPORT_DEPTH = 8
 MAX_IMPORT_BYTES = 16_000_000
 _REMOTE_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
-_VERSION_PART = re.compile(r"^(>=|<=|==|>|<)?\s*([0-9]+(?:\.[0-9]+){0,2})$")
+_VERSION = re.compile(r"^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:(a|b|rc)(\d+))?(?:\+[0-9A-Za-z.-]+)?$")
+_VERSION_PART = re.compile(r"^(>=|<=|==|>|<)?\s*([0-9]+(?:\.[0-9]+){0,2}(?:(?:a|b|rc)[0-9]+)?)$")
 
 
 @dataclass
@@ -30,12 +31,19 @@ class _State:
     total_bytes: int = 0
 
 
-def _version_tuple(value: str) -> tuple[int, int, int]:
-    match = re.match(r"^(\d+)(?:\.(\d+))?(?:\.(\d+))?", value)
+def _version_tuple(value: str) -> tuple[int, int, int, int, int]:
+    match = _VERSION.fullmatch(value)
     if match is None:
         raise ModuleResolutionError(f"Unsupported module version: {value}")
-    major, minor, patch = match.groups()
-    return int(major), int(minor or 0), int(patch or 0)
+    major, minor, patch, prerelease, prerelease_number = match.groups()
+    stage = {"a": 0, "b": 1, "rc": 2, None: 3}[prerelease]
+    return (
+        int(major),
+        int(minor or 0),
+        int(patch or 0),
+        stage,
+        int(prerelease_number or 0),
+    )
 
 
 def _version_matches(version: str, constraint: str | None) -> bool:
@@ -69,14 +77,28 @@ def _inside(path: Path, boundary: Path) -> bool:
     return True
 
 
+def _contains_symlink(path: Path, boundary: Path) -> bool:
+    current = path.absolute()
+    while _inside(current, boundary):
+        if current.is_symlink():
+            return True
+        if current == boundary:
+            break
+        current = current.parent
+    return False
+
+
 def _visit(path: Path, state: _State, depth: int) -> None:
     if depth > MAX_IMPORT_DEPTH:
         raise UnsafeInputError(f"Ontology import depth exceeds {MAX_IMPORT_DEPTH}.")
-    resolved = path.resolve(strict=True)
+    if _contains_symlink(path, state.boundary):
+        raise UnsafeInputError("Symbolic links are not accepted in ontology imports.")
+    try:
+        resolved = path.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ModuleResolutionError("An ontology import could not be resolved.") from exc
     if not _inside(resolved, state.boundary):
         raise ModuleResolutionError("Ontology import leaves the configured filesystem boundary.")
-    if path.is_symlink() or resolved.is_symlink():
-        raise UnsafeInputError("Symbolic links are not accepted in ontology imports.")
     if resolved in state.active:
         raise ModuleResolutionError("Ontology import cycle detected.")
     if resolved in state.paths:
@@ -164,7 +186,12 @@ def _merge(root: Ontology, modules: list[tuple[Path, Ontology]]) -> tuple[Ontolo
                 for prop_name, prop in entity.properties.items()
             }
             entities[qualified] = entity.model_copy(
-                update={"id": qualified, "name": qualified, "properties": properties}
+                update={
+                    "id": qualified,
+                    "name": qualified,
+                    "aliases": tuple(f"{prefix}__{alias}" for alias in entity.aliases),
+                    "properties": properties,
+                }
             )
             provenance[f"entities.{qualified}"] = namespace
         for relation in sorted(module.relationships, key=lambda item: item.name):
@@ -176,6 +203,7 @@ def _merge(root: Ontology, modules: list[tuple[Path, Ontology]]) -> tuple[Ontolo
                 relation.model_copy(
                     update={
                         "name": qualified,
+                        "aliases": tuple(f"{prefix}__{alias}" for alias in relation.aliases),
                         "from_": f"{prefix}__{relation.from_}",
                         "to": f"{prefix}__{relation.to}",
                     }
@@ -200,6 +228,7 @@ def _merge(root: Ontology, modules: list[tuple[Path, Ontology]]) -> tuple[Ontolo
                 action.model_copy(
                     update={
                         "name": qualified,
+                        "aliases": tuple(f"{prefix}__{alias}" for alias in action.aliases),
                         "subject": f"{prefix}__{action.subject}",
                         "inputs": action_inputs,
                         "output": output,
@@ -239,6 +268,8 @@ def resolve_local_modules(
     _visit(root_path, state, 0)
     root = state.ontologies[0][1]
     merged, provenance = _merge(root, state.ontologies)
+    if validate_ontology(merged).errors:
+        raise ModuleResolutionError("The merged ontology failed semantic validation.")
     modules = tuple(
         ModuleProvenance(
             namespace=ontology.ontology.namespace,

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from typing import Any
+
 from open_ontology_lite.models import Ontology
 from open_ontology_lite.models.diff import DiffChange, DiffResult
 
@@ -34,6 +37,16 @@ def _alias_renames(
                 renames[alias] = new_name
                 break
     return renames
+
+
+def _enum_delta(old: tuple[Any, ...], new: tuple[Any, ...]) -> list[Any]:
+    """Compare enum values without requiring them to be hashable or orderable."""
+
+    return [item for item in old if not any(item == candidate for candidate in new)]
+
+
+def _enum_text(values: list[Any]) -> str:
+    return json.dumps(values, sort_keys=True, default=str, separators=(",", ":"))
 
 
 def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
@@ -129,7 +142,8 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
             )
         for prop in sorted((set(new_props) - set(old_props)) - set(prop_renames.values())):
             new_prop = new_props[prop]
-            if new_prop.required and new_prop.default is None:
+            has_default = "default" in new_prop.model_fields_set
+            if new_prop.required and not has_default:
                 changes.append(
                     _change(
                         "breaking",
@@ -178,16 +192,34 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
                         f"Default for '{prop}' changed.",
                     )
                 )
-            if old_prop.enum is not None and new_prop.enum is not None:
-                removed = set(old_prop.enum) - set(new_prop.enum)
-                added = set(new_prop.enum) - set(old_prop.enum)
+            if old_prop.enum is None and new_prop.enum is not None:
+                changes.append(
+                    _change(
+                        "potentially_breaking",
+                        "ENUM_CONSTRAINT_ADDED",
+                        path,
+                        f"An enum constraint was added to '{prop}'.",
+                    )
+                )
+            elif old_prop.enum is not None and new_prop.enum is None:
+                changes.append(
+                    _change(
+                        "non_breaking",
+                        "ENUM_CONSTRAINT_REMOVED",
+                        path,
+                        f"The enum constraint was removed from '{prop}'.",
+                    )
+                )
+            elif old_prop.enum is not None and new_prop.enum is not None:
+                removed = _enum_delta(old_prop.enum, new_prop.enum)
+                added = _enum_delta(new_prop.enum, old_prop.enum)
                 if removed:
                     changes.append(
                         _change(
                             "breaking",
                             "ENUM_VALUE_REMOVED",
                             path,
-                            f"Enum values removed from '{prop}': {sorted(removed)}.",
+                            f"Enum values removed from '{prop}': {_enum_text(removed)}.",
                         )
                     )
                 if added:
@@ -196,12 +228,12 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
                             "non_breaking",
                             "ENUM_VALUE_ADDED",
                             path,
-                            f"Enum values added to '{prop}': {sorted(added)}.",
+                            f"Enum values added to '{prop}': {_enum_text(added)}.",
                         )
                     )
             if old_prop.required is False and new_prop.required is True:
                 classification = (
-                    "potentially_breaking" if new_prop.default is not None else "breaking"
+                    "potentially_breaking" if "default" in new_prop.model_fields_set else "breaking"
                 )
                 changes.append(
                     _change(
@@ -211,41 +243,37 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
                         f"Property '{prop}' became required.",
                     )
                 )
-            if (
-                old_prop.minimum is not None
-                and new_prop.minimum is not None
-                and new_prop.minimum > old_prop.minimum
-            ):
+            if old_prop.required is True and new_prop.required is False:
+                changes.append(
+                    _change(
+                        "non_breaking",
+                        "PROPERTY_BECAME_OPTIONAL",
+                        path,
+                        f"Property '{prop}' became optional.",
+                    )
+                )
+            minimum_stricter = new_prop.minimum is not None and (
+                old_prop.minimum is None or new_prop.minimum > old_prop.minimum
+            )
+            maximum_stricter = new_prop.maximum is not None and (
+                old_prop.maximum is None or new_prop.maximum < old_prop.maximum
+            )
+            if minimum_stricter or maximum_stricter:
                 changes.append(
                     _change(
                         "potentially_breaking",
                         "NUMERIC_LIMIT_STRICTER",
                         path,
-                        f"Minimum for '{prop}' became stricter.",
+                        f"Numeric limits for '{prop}' became stricter.",
                     )
                 )
-            if (
-                old_prop.maximum is not None
-                and new_prop.maximum is not None
-                and new_prop.maximum < old_prop.maximum
-            ):
-                changes.append(
-                    _change(
-                        "potentially_breaking",
-                        "NUMERIC_LIMIT_STRICTER",
-                        path,
-                        f"Maximum for '{prop}' became stricter.",
-                    )
-                )
-            if (
-                old_prop.minimum is not None
-                and new_prop.minimum is not None
-                and new_prop.minimum < old_prop.minimum
-            ) or (
-                old_prop.maximum is not None
-                and new_prop.maximum is not None
-                and new_prop.maximum > old_prop.maximum
-            ):
+            minimum_relaxed = old_prop.minimum is not None and (
+                new_prop.minimum is None or new_prop.minimum < old_prop.minimum
+            )
+            maximum_relaxed = old_prop.maximum is not None and (
+                new_prop.maximum is None or new_prop.maximum > old_prop.maximum
+            )
+            if minimum_relaxed or maximum_relaxed:
                 changes.append(
                     _change(
                         "non_breaking",
@@ -254,15 +282,13 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
                         f"Numeric limits for '{prop}' were relaxed.",
                     )
                 )
-            if (
-                old_prop.min_length is not None
-                and new_prop.min_length is not None
-                and new_prop.min_length > old_prop.min_length
-            ) or (
-                old_prop.max_length is not None
-                and new_prop.max_length is not None
-                and new_prop.max_length < old_prop.max_length
-            ):
+            minimum_length_stricter = new_prop.min_length is not None and (
+                old_prop.min_length is None or new_prop.min_length > old_prop.min_length
+            )
+            maximum_length_stricter = new_prop.max_length is not None and (
+                old_prop.max_length is None or new_prop.max_length < old_prop.max_length
+            )
+            if minimum_length_stricter or maximum_length_stricter:
                 changes.append(
                     _change(
                         "potentially_breaking",
@@ -271,15 +297,13 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
                         f"Length limits for '{prop}' became stricter.",
                     )
                 )
-            if (
-                old_prop.min_length is not None
-                and new_prop.min_length is not None
-                and new_prop.min_length < old_prop.min_length
-            ) or (
-                old_prop.max_length is not None
-                and new_prop.max_length is not None
-                and new_prop.max_length > old_prop.max_length
-            ):
+            minimum_length_relaxed = old_prop.min_length is not None and (
+                new_prop.min_length is None or new_prop.min_length < old_prop.min_length
+            )
+            maximum_length_relaxed = old_prop.max_length is not None and (
+                new_prop.max_length is None or new_prop.max_length > old_prop.max_length
+            )
+            if minimum_length_relaxed or maximum_length_relaxed:
                 changes.append(
                     _change(
                         "non_breaking",
@@ -288,7 +312,25 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
                         f"Length limits for '{prop}' were relaxed.",
                     )
                 )
-            if old_prop.pattern != new_prop.pattern and old_prop.pattern is not None:
+            if old_prop.pattern is None and new_prop.pattern is not None:
+                changes.append(
+                    _change(
+                        "potentially_breaking",
+                        "PATTERN_ADDED",
+                        path,
+                        f"A pattern constraint was added to '{prop}'.",
+                    )
+                )
+            elif old_prop.pattern is not None and new_prop.pattern is None:
+                changes.append(
+                    _change(
+                        "non_breaking",
+                        "PATTERN_REMOVED",
+                        path,
+                        f"The pattern constraint was removed from '{prop}'.",
+                    )
+                )
+            elif old_prop.pattern != new_prop.pattern:
                 changes.append(
                     _change(
                         "potentially_breaking",
@@ -408,6 +450,15 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
     for name in sorted(set(old_actions) & set(new_actions)):
         old_action = old_actions[name]
         new_action = new_actions[name]
+        if old_action.subject != new_action.subject:
+            changes.append(
+                _change(
+                    "breaking",
+                    "ACTION_SUBJECT_CHANGED",
+                    f"actions.{name}.subject",
+                    f"Action '{name}' subject changed.",
+                )
+            )
         for input_name in sorted(set(old_action.inputs) - set(new_action.inputs)):
             changes.append(
                 _change(
@@ -419,14 +470,16 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
             )
         for input_name in sorted(set(new_action.inputs) - set(old_action.inputs)):
             new_input = new_action.inputs[input_name]
-            classification = (
-                "breaking" if new_input.required and new_input.default is None else "non_breaking"
-            )
-            code = (
-                "REQUIRED_ACTION_INPUT_ADDED"
-                if classification == "breaking"
-                else "OPTIONAL_ACTION_INPUT_ADDED"
-            )
+            has_default = "default" in new_input.model_fields_set
+            if new_input.required and not has_default:
+                classification = "breaking"
+                code = "REQUIRED_ACTION_INPUT_ADDED"
+            elif new_input.required:
+                classification = "potentially_breaking"
+                code = "REQUIRED_ACTION_INPUT_ADDED_WITH_DEFAULT"
+            else:
+                classification = "non_breaking"
+                code = "OPTIONAL_ACTION_INPUT_ADDED"
             changes.append(
                 _change(
                     classification,
@@ -436,13 +489,24 @@ def diff_ontologies(old: Ontology, new: Ontology) -> DiffResult:
                 )
             )
         for input_name in sorted(set(old_action.inputs) & set(new_action.inputs)):
-            if old_action.inputs[input_name].type != new_action.inputs[input_name].type:
+            old_input = old_action.inputs[input_name]
+            new_input = new_action.inputs[input_name]
+            if old_input.type != new_input.type:
                 changes.append(
                     _change(
                         "breaking",
                         "ACTION_INPUT_TYPE_CHANGED",
                         f"actions.{name}.inputs.{input_name}",
                         f"Action input '{input_name}' changed type.",
+                    )
+                )
+            elif old_input != new_input:
+                changes.append(
+                    _change(
+                        "potentially_breaking",
+                        "ACTION_INPUT_CONTRACT_CHANGED",
+                        f"actions.{name}.inputs.{input_name}",
+                        f"Action input '{input_name}' contract changed.",
                     )
                 )
         if old_action.output != new_action.output:

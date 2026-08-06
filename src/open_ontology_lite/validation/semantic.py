@@ -79,6 +79,30 @@ def _validate_aliases(
     return issues
 
 
+def _validate_alias_namespace(
+    names_and_aliases: Iterable[tuple[str, tuple[str, ...]]], path: str, label: str
+) -> list[ValidationIssue]:
+    owners: dict[str, str] = {}
+    issues: list[ValidationIssue] = []
+    entries = tuple(names_and_aliases)
+    primary_names = {name for name, _ in entries}
+    for name, aliases in entries:
+        owners[name] = name
+        for alias in aliases:
+            owner = owners.get(alias)
+            if alias in primary_names or (owner is not None and owner != name):
+                issues.append(
+                    _issue(
+                        "ALIAS_AMBIGUOUS",
+                        f"{label} alias '{alias}' conflicts with another declaration.",
+                        f"{path}.{name}.aliases",
+                    )
+                )
+            else:
+                owners[alias] = name
+    return issues
+
+
 def _validate_property_references(
     prop: PropertyDef, path: str, entity_names: set[str]
 ) -> list[ValidationIssue]:
@@ -91,6 +115,24 @@ def _validate_property_references(
                 f"{path}.target",
                 suggestion=f"Declare entity '{prop.target}' or correct the target.",
             )
+        )
+    # Nested schemas are semantic definitions too; validate them before they
+    # reach runtime recursion or JSON Schema generation.
+    issues.extend(
+        _validate_alias_namespace(
+            ((name, nested.aliases) for name, nested in prop.properties.items()),
+            f"{path}.properties",
+            "Nested property",
+        )
+    )
+    for name, nested in prop.properties.items():
+        nested_path = f"{path}.properties.{name}"
+        issues.extend(_validate_identifier(name, nested_path, "Nested property"))
+        issues.extend(_validate_property_references(nested, nested_path, entity_names))
+        issues.extend(_validate_aliases(nested.aliases, nested_path, "Nested property"))
+    if prop.items_schema is not None:
+        issues.extend(
+            _validate_property_references(prop.items_schema, f"{path}.items_schema", entity_names)
         )
     return issues
 
@@ -159,9 +201,23 @@ def validate_ontology(ontology: Ontology, *, strict_permissions: bool = True) ->
     # Model construction already handled field types; this pass checks cross
     # references and compatibility rules that require the full ontology.
     entity_names = set(ontology.entities)
+    issues.extend(
+        _validate_alias_namespace(
+            ((name, entity.aliases) for name, entity in ontology.entities.items()),
+            "entities",
+            "Entity",
+        )
+    )
     for entity_name, entity in ontology.entities.items():
         issues.extend(_validate_identifier(entity_name, f"entities.{entity_name}", "Entity"))
         issues.extend(_validate_aliases(entity.aliases, f"entities.{entity_name}", "Entity"))
+        issues.extend(
+            _validate_alias_namespace(
+                ((name, prop.aliases) for name, prop in entity.properties.items()),
+                f"entities.{entity_name}.properties",
+                "Property",
+            )
+        )
         for prop_name, prop in entity.properties.items():
             issues.extend(
                 _validate_identifier(
@@ -184,6 +240,13 @@ def validate_ontology(ontology: Ontology, *, strict_permissions: bool = True) ->
             )
 
     rel_names = [rel.name for rel in ontology.relationships]
+    issues.extend(
+        _validate_alias_namespace(
+            ((rel.name, rel.aliases) for rel in ontology.relationships),
+            "relationships",
+            "Relationship",
+        )
+    )
     for duplicate in sorted(_duplicates(rel_names)):
         issues.append(
             _issue(
@@ -214,6 +277,13 @@ def validate_ontology(ontology: Ontology, *, strict_permissions: bool = True) ->
             )
 
     action_names = [action.name for action in ontology.actions]
+    issues.extend(
+        _validate_alias_namespace(
+            ((action.name, action.aliases) for action in ontology.actions),
+            "actions",
+            "Action",
+        )
+    )
     for duplicate in sorted(_duplicates(action_names)):
         issues.append(
             _issue("ACTION_DUPLICATE", f"Duplicate action name '{duplicate}'.", "actions")
@@ -231,6 +301,13 @@ def validate_ontology(ontology: Ontology, *, strict_permissions: bool = True) ->
                     f"{path}.subject",
                 )
             )
+        issues.extend(
+            _validate_alias_namespace(
+                ((name, prop.aliases) for name, prop in action.inputs.items()),
+                f"{path}.inputs",
+                "Action input",
+            )
+        )
         for input_name, prop in action.inputs.items():
             issues.extend(
                 _validate_identifier(input_name, f"{path}.inputs.{input_name}", "Action input")
@@ -238,10 +315,14 @@ def validate_ontology(ontology: Ontology, *, strict_permissions: bool = True) ->
             issues.extend(
                 _validate_property_references(prop, f"{path}.inputs.{input_name}", entity_names)
             )
+            issues.extend(
+                _validate_aliases(prop.aliases, f"{path}.inputs.{input_name}", "Action input")
+            )
         if action.output is not None:
             issues.extend(
                 _validate_property_references(action.output, f"{path}.output", entity_names)
             )
+            issues.extend(_validate_aliases(action.output.aliases, f"{path}.output", "Output"))
         for perm_index, permission in enumerate(action.permissions):
             if not permission:
                 issues.append(

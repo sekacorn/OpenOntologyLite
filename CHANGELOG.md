@@ -11,6 +11,8 @@
 - Expanded AI System Maps with optional data, model, tool, review, retention, deployment, ontology-reference, and provenance fields.
 - Added bounded local-only ontology imports with cycle, boundary, version, digest, namespace, conflict, and symlink defenses.
 - Added runtime, contract, migration, and local-module CLI commands and a complete offline example.
+- Hardened non-finite input handling, aggregate runtime limits, alias resolution, module version parsing, and generated-output path safety.
+- Corrected structured enum diffs, migration paths, nested schema validation, scalar action outputs, and AI System Map sensitivity checks.
 
 ## 0.1.0a3 - 2026-07-26
 

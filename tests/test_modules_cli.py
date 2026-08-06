@@ -75,6 +75,21 @@ def test_local_module_resolution_merge_and_provenance(tmp_path: Path) -> None:
     assert [module.namespace for module in result.modules] == ["example.root", "example.shared"]
     assert result.modules[1].path == "shared.yaml"
 
+    aliased_module = (
+        module.read_text(encoding="utf-8")
+        .replace("  Item:\n", "  Item:\n    aliases: [LegacyItem]\n")
+        .replace("  - name: read_item\n", "  - name: read_item\n    aliases: [legacy_read]\n")
+    )
+    module.write_text(aliased_module, encoding="utf-8")
+    aliased = resolve_local_modules(root)
+    assert aliased.ontology.entities["example__shared__Item"].aliases == (
+        "example__shared__LegacyItem",
+    )
+    imported_action = next(
+        action for action in aliased.ontology.actions if action.name == "example__shared__read_item"
+    )
+    assert imported_action.aliases == ("example__shared__legacy_read",)
+
 
 def test_module_digest_version_namespace_and_remote_fail_closed(tmp_path: Path) -> None:
     (tmp_path / "shared.yaml").write_text(MODULE, encoding="utf-8")
@@ -96,6 +111,17 @@ def test_module_digest_version_namespace_and_remote_fail_closed(tmp_path: Path) 
         root.write_text(_root(declaration), encoding="utf-8")
         with pytest.raises(ModuleResolutionError):
             resolve_local_modules(root)
+
+    invalid_version = tmp_path / "invalid-version.yaml"
+    invalid_version.write_text(
+        MODULE.replace('version: "1.2.0"', 'version: "1.2.0junk"'), encoding="utf-8"
+    )
+    root = tmp_path / "invalid-version-root.yaml"
+    root.write_text(
+        _root('  - path: invalid-version.yaml\n    version: ">=1.0"\n'), encoding="utf-8"
+    )
+    with pytest.raises(ModuleResolutionError, match="Unsupported module version"):
+        resolve_local_modules(root)
 
 
 def test_module_cycles_and_boundary_traversal_are_rejected(tmp_path: Path) -> None:
@@ -226,6 +252,46 @@ def test_runtime_cli_failure_exit_codes(tmp_path: Path) -> None:
         ],
     )
     assert invalid_format.exit_code == 2
+
+
+def test_action_cli_accepts_scalar_output_and_refuses_input_overwrite(tmp_path: Path) -> None:
+    ontology = tmp_path / "scalar.yaml"
+    ontology.write_text(
+        """schema_version: "1.0"
+ontology: {id: scalar, name: Scalar, version: "1", namespace: example.scalar}
+entities:
+  Thing: {properties: {}}
+actions:
+  - name: echo
+    subject: Thing
+    output: {type: string}
+""",
+        encoding="utf-8",
+    )
+    inputs = tmp_path / "inputs.json"
+    output_value = tmp_path / "output.json"
+    inputs.write_text("{}", encoding="utf-8")
+    output_value.write_text('"done"', encoding="utf-8")
+    result = runner.invoke(
+        app,
+        [
+            "action",
+            "check",
+            str(ontology),
+            "echo",
+            str(inputs),
+            "--output-value",
+            str(output_value),
+            "--json",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["validated_output"] == "done"
+
+    original = ontology.read_text(encoding="utf-8")
+    collision = runner.invoke(app, ["normalize", str(ontology), "--output", str(ontology)])
+    assert collision.exit_code == 2
+    assert ontology.read_text(encoding="utf-8") == original
 
 
 def test_expanded_ai_map_ontology_reference_validation() -> None:

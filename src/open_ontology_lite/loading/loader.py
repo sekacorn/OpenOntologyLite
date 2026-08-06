@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+import math
 import stat
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import yaml
 from pydantic import ValidationError
@@ -23,6 +24,10 @@ MAX_INPUT_NODES = 100_000
 
 class _DuplicateJsonKeyError(ValueError):
     """Raised internally when JSON contains an ambiguous duplicate key."""
+
+
+class _NonFiniteJsonNumberError(ValueError):
+    """Raised internally for JSON constants that are outside the JSON standard."""
 
 
 class _UniqueKeySafeLoader(yaml.SafeLoader):
@@ -73,6 +78,10 @@ def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def _reject_json_constant(value: str) -> NoReturn:
+    raise _NonFiniteJsonNumberError(value)
+
+
 def validation_error_message(exc: ValidationError) -> str:
     """Format Pydantic errors without echoing input values."""
 
@@ -101,6 +110,8 @@ def _depth(value: object, current: int = 0) -> int:
         node_count += 1
         if node_count > MAX_INPUT_NODES:
             raise UnsafeInputError(f"Ontology input exceeds {MAX_INPUT_NODES} parsed nodes.")
+        if isinstance(item, float) and not math.isfinite(item):
+            raise UnsafeInputError("Input contains a non-finite numeric value.")
         max_depth = max(max_depth, depth)
         if isinstance(item, dict):
             stack.extend((child, depth + 1) for child in item.values())
@@ -146,8 +157,8 @@ def _load_unique_yaml(text: str) -> object:
         loader.dispose()  # type: ignore[no-untyped-call]
 
 
-def load_raw(path: str | Path) -> dict[str, Any]:
-    """Load raw YAML or JSON using safe parsers."""
+def load_value(path: str | Path) -> Any:
+    """Load one bounded YAML or JSON value using safe parsers."""
 
     source = Path(path)
     if not source.exists():
@@ -161,23 +172,36 @@ def load_raw(path: str | Path) -> dict[str, Any]:
         if suffix in {".yaml", ".yml"}:
             loaded = _load_unique_yaml(text)
         elif suffix == ".json":
-            loaded = json.loads(text, object_pairs_hook=_unique_json_object)
+            loaded = json.loads(
+                text,
+                object_pairs_hook=_unique_json_object,
+                parse_constant=_reject_json_constant,
+            )
         else:
             raise OntologyLoadError(f"Unsupported ontology file extension: {suffix}")
     except yaml.YAMLError as exc:
         raise OntologyParseError(f"Malformed YAML: {_yaml_error_message(exc)}") from exc
     except _DuplicateJsonKeyError as exc:
         raise OntologyParseError("Malformed JSON: duplicate object key.") from exc
+    except _NonFiniteJsonNumberError as exc:
+        raise OntologyParseError("Malformed JSON: non-finite numbers are not allowed.") from exc
     except json.JSONDecodeError as exc:
         raise OntologyParseError(
             f"Malformed JSON at line {exc.lineno}, column {exc.colno}."
         ) from exc
     except RecursionError as exc:
         raise UnsafeInputError("Ontology input has excessive parser nesting.") from exc
-    if not isinstance(loaded, dict):
-        raise OntologyParseError("Ontology root must be an object.")
     if _depth(loaded) > MAX_NESTING_DEPTH:
         raise UnsafeInputError(f"Ontology nesting exceeds {MAX_NESTING_DEPTH} levels.")
+    return loaded
+
+
+def load_raw(path: str | Path) -> dict[str, Any]:
+    """Load a bounded YAML or JSON object using safe parsers."""
+
+    loaded = load_value(path)
+    if not isinstance(loaded, dict):
+        raise OntologyParseError("Ontology root must be an object.")
     return loaded
 
 

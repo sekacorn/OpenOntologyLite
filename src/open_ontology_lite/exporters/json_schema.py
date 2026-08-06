@@ -3,11 +3,33 @@
 from __future__ import annotations
 
 import json
+import math
 from decimal import Decimal
 from typing import Any
 
+from open_ontology_lite.errors import OntologyExportError
 from open_ontology_lite.models import ActionDef, Ontology, PropertyDef
 from open_ontology_lite.normalization import ontology_digest
+
+
+def _action(ontology: Ontology, action: ActionDef | str) -> ActionDef:
+    if isinstance(action, ActionDef):
+        return action
+    matches = [item for item in ontology.actions if item.name == action or action in item.aliases]
+    if len(matches) != 1:
+        raise KeyError(f"Unknown or ambiguous action: {action}")
+    return matches[0]
+
+
+def _json_number(value: int | float | Decimal) -> int | float:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, Decimal) and value == value.to_integral_value():
+        return int(value)
+    result = float(value)
+    if not math.isfinite(result):
+        raise OntologyExportError("A numeric constraint cannot be represented as finite JSON.")
+    return result
 
 
 def property_schema(prop: PropertyDef) -> dict[str, Any]:
@@ -76,23 +98,25 @@ def property_schema(prop: PropertyDef) -> dict[str, Any]:
         schema["pattern"] = prop.pattern
     if prop.minimum is not None:
         key = "x-minimum" if prop.type == "decimal" else "minimum"
-        schema[key] = str(prop.minimum) if prop.type == "decimal" else float(prop.minimum)
+        schema[key] = str(prop.minimum) if prop.type == "decimal" else _json_number(prop.minimum)
     if prop.maximum is not None:
         key = "x-maximum" if prop.type == "decimal" else "maximum"
-        schema[key] = str(prop.maximum) if prop.type == "decimal" else float(prop.maximum)
+        schema[key] = str(prop.maximum) if prop.type == "decimal" else _json_number(prop.maximum)
     if prop.min_length is not None:
         key = "minItems" if prop.type == "array" else "minLength"
         schema[key] = prop.min_length
     if prop.max_length is not None:
         key = "maxItems" if prop.type == "array" else "maxLength"
         schema[key] = prop.max_length
-    if prop.default is not None:
+    if "default" in prop.model_fields_set:
         schema["default"] = prop.default
     return schema
 
 
 def _json_default(value: object) -> object:
     if isinstance(value, Decimal):
+        if not value.is_finite():
+            raise OntologyExportError("JSON Schema contains a non-finite decimal value.")
         return str(value)
     raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
@@ -123,11 +147,7 @@ def entity_schema(ontology: Ontology, entity_name: str) -> dict[str, Any]:
 def action_input_schema(ontology: Ontology, action: ActionDef | str) -> dict[str, Any]:
     """Export one action's inputs as a deterministic JSON Schema document."""
 
-    contract = (
-        next(item for item in ontology.actions if item.name == action)
-        if isinstance(action, str)
-        else action
-    )
+    contract = _action(ontology, action)
     properties = {name: property_schema(contract.inputs[name]) for name in sorted(contract.inputs)}
     required = sorted(name for name, item in contract.inputs.items() if item.required)
     schema: dict[str, Any] = {
@@ -155,11 +175,7 @@ def action_input_schema(ontology: Ontology, action: ActionDef | str) -> dict[str
 def action_output_schema(ontology: Ontology, action: ActionDef | str) -> dict[str, Any] | None:
     """Export one action's output contract when it is representable."""
 
-    contract = (
-        next(item for item in ontology.actions if item.name == action)
-        if isinstance(action, str)
-        else action
-    )
+    contract = _action(ontology, action)
     if contract.output is None:
         return None
     return {
@@ -198,7 +214,11 @@ def json_schema_text(ontology: Ontology, entity: str | None = None) -> str:
 
     return (
         json.dumps(
-            combined_schema(ontology, entity), sort_keys=True, indent=2, default=_json_default
+            combined_schema(ontology, entity),
+            sort_keys=True,
+            indent=2,
+            default=_json_default,
+            allow_nan=False,
         )
         + "\n"
     )

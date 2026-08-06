@@ -14,8 +14,10 @@ from open_ontology_lite import (
 from open_ontology_lite.cli import app
 from open_ontology_lite.errors import OntologyLoadError, OntologyParseError, UnsafeInputError
 from open_ontology_lite.exporters import json_schema_text, markdown_docs, mermaid_text
+from open_ontology_lite.loading import load_value
 from open_ontology_lite.loading.json_loader import load_raw as load_json_raw
 from open_ontology_lite.loading.yaml_loader import load_raw as load_yaml_raw
+from open_ontology_lite.models import PropertyDef
 from open_ontology_lite.normalization import canonical_json
 from open_ontology_lite.validation import find_cycles
 from open_ontology_lite.validation.structural import validate_structure
@@ -347,6 +349,23 @@ def test_loader_rejects_empty_unsupported_directory_and_bad_json(tmp_path: Path)
         load_ontology(tmp_path)
 
 
+@pytest.mark.parametrize(
+    ("name", "content"),
+    [("value.json", "NaN"), ("value.yaml", ".nan")],
+)
+def test_value_loader_rejects_non_finite_numbers(tmp_path: Path, name: str, content: str) -> None:
+    path = tmp_path / name
+    path.write_text(content, encoding="utf-8")
+    with pytest.raises((OntologyParseError, UnsafeInputError)):
+        load_value(path)
+
+
+def test_value_loader_accepts_bounded_scalar(tmp_path: Path) -> None:
+    path = tmp_path / "value.json"
+    path.write_text('"complete"', encoding="utf-8")
+    assert load_value(path) == "complete"
+
+
 def test_json_schema_property_type_branches(tmp_path: Path) -> None:
     path = tmp_path / "types.yaml"
     path.write_text(
@@ -422,6 +441,38 @@ permissions:
         "PERMISSION_EMPTY",
         "PERMISSION_NAME_INVALID",
     } <= codes
+
+
+def test_nested_schema_and_alias_namespaces_are_validated() -> None:
+    ontology = load_ontology(EXAMPLES / "customer_support.yaml")
+    customer = ontology.entities["Customer"]
+    entities = dict(ontology.entities)
+    entities["Customer"] = customer.model_copy(
+        update={
+            "aliases": ("Agent",),
+            "properties": {
+                **customer.properties,
+                "records": PropertyDef(
+                    type="array",
+                    items_schema=PropertyDef(
+                        type="object",
+                        properties={"owner": PropertyDef(type="reference", target="Missing")},
+                    ),
+                ),
+            },
+        }
+    )
+    report = validate_ontology(ontology.model_copy(update={"entities": entities}))
+    codes = {issue.code for issue in report.issues}
+    assert {"ALIAS_AMBIGUOUS", "PROPERTY_REFERENCE_TARGET_NOT_FOUND"} <= codes
+
+
+def test_canonical_json_rejects_non_finite_metadata() -> None:
+    ontology = load_ontology(EXAMPLES / "customer_support.yaml").model_copy(
+        update={"metadata": {"invalid": float("nan")}}
+    )
+    with pytest.raises(UnsafeInputError):
+        canonical_json(ontology)
 
 
 def test_cli_error_paths_and_run_helper() -> None:

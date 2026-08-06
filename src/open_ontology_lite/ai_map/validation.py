@@ -22,6 +22,12 @@ _SENSITIVE_CATEGORIES = {
     "safety",
     "security",
 }
+_HUMAN_REVIEW_ESCALATIONS = {
+    "human_review",
+    "security_review",
+    "legal_review",
+    "compliance_review",
+}
 MAX_VALIDATION_ISSUES = 1_000
 
 
@@ -159,6 +165,7 @@ def validate_ai_system_map(
 
     entity_names = [entity.name for entity in ai_map.entities if entity.name]
     known_entities = set(entity_names)
+    entity_sensitivity = {entity.name: entity.sensitivity for entity in ai_map.entities}
     for duplicate in sorted(_duplicates(entity_names)):
         issues.append(
             _issue(
@@ -249,6 +256,22 @@ def validate_ai_system_map(
                     f"Use one of: {', '.join(ESCALATION_NAMES)}.",
                 )
             )
+
+    ontology_entities: set[str] = set()
+    ontology_actions: set[str] = set()
+    ontology_permissions: set[str] = set()
+    if ontology is not None:
+        ontology_entities = {
+            identifier
+            for name, entity in ontology.entities.items()
+            for identifier in (name, *entity.aliases)
+        }
+        ontology_actions = {
+            identifier
+            for action in ontology.actions
+            for identifier in (action.name, *action.aliases)
+        }
+        ontology_permissions = set(ontology.permissions)
 
     for index, task in enumerate(ai_map.tasks):
         path = f"tasks[{index}]"
@@ -359,15 +382,19 @@ def validate_ai_system_map(
                     )
                 )
 
-        sensitive = task.risk_level == "regulated" or bool(
+        control_sensitive = task.risk_level == "regulated" or bool(
             _category_tokens(task.category) & _SENSITIVE_CATEGORIES
+        )
+        handles_sensitive_data = any(
+            entity_sensitivity.get(name) in {"confidential", "restricted"}
+            for name in task.related_entities
         )
         controlled = (
             task.human_review_required
             or bool(task.escalation)
             or "blocked_or_escalate" in task.allowed_routes
         )
-        if sensitive and not controlled:
+        if control_sensitive and not controlled:
             issues.append(
                 _issue(
                     "error",
@@ -376,7 +403,7 @@ def validate_ai_system_map(
                     path,
                 )
             )
-        if sensitive and not task.data_handling_expectations:
+        if (control_sensitive or handles_sensitive_data) and not task.data_handling_expectations:
             issues.append(
                 _issue(
                     "warning",
@@ -385,9 +412,12 @@ def validate_ai_system_map(
                     f"{path}.data_handling_expectations",
                 )
             )
-        if task.human_review_required and not (
-            task.human_review_points or task.escalation or "human_review" in task.allowed_routes
-        ):
+        has_human_review_path = (
+            bool(task.human_review_points)
+            or "human_review" in task.allowed_routes
+            or bool(set(task.escalation) & _HUMAN_REVIEW_ESCALATIONS)
+        )
+        if task.human_review_required and not has_human_review_path:
             issues.append(
                 _issue(
                     "error",
@@ -433,9 +463,6 @@ def validate_ai_system_map(
                 )
             )
         if ontology is not None:
-            ontology_entities = set(ontology.entities)
-            ontology_actions = {action.name for action in ontology.actions}
-            ontology_permissions = set(ontology.permissions)
             for entity_name in task.ontology_entities:
                 if entity_name not in ontology_entities:
                     issues.append(

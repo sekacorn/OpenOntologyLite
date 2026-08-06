@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from decimal import Decimal
 from typing import Any, cast
 
+from open_ontology_lite.errors import UnsafeInputError
 from open_ontology_lite.models import Ontology
 
 
@@ -14,11 +16,17 @@ def _stable(value: Any) -> Any:
     # Decimal is stringified so canonical JSON does not depend on float
     # conversion or platform-specific representation details.
     if isinstance(value, Decimal):
+        if not value.is_finite():
+            raise UnsafeInputError("Canonical data contains a non-finite decimal value.")
         return str(value)
+    if isinstance(value, float) and not math.isfinite(value):
+        raise UnsafeInputError("Canonical data contains a non-finite numeric value.")
     if isinstance(value, tuple | list):
         return [_stable(item) for item in value]
     if isinstance(value, dict):
-        return {str(key): _stable(value[key]) for key in sorted(value)}
+        if not all(isinstance(key, str) for key in value):
+            raise UnsafeInputError("Canonical mappings require string keys.")
+        return {key: _stable(value[key]) for key in sorted(value)}
     return value
 
 
@@ -60,7 +68,15 @@ def normalize_ontology(ontology: Ontology) -> dict[str, Any]:
 def canonical_json(ontology: Ontology) -> str:
     """Return stable canonical JSON with a trailing newline."""
 
-    return json.dumps(normalize_ontology(ontology), sort_keys=True, separators=(",", ":")) + "\n"
+    return (
+        json.dumps(
+            normalize_ontology(ontology),
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        + "\n"
+    )
 
 
 def ontology_digest(ontology: Ontology) -> str:
