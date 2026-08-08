@@ -6,7 +6,7 @@ across models, agents, databases, and vendors.
 
 ## Status
 
-Ready for public alpha release preparation with documented limitations.
+Current release: `0.1.0a4` public alpha software with documented limitations.
 
 ## Alpha Warning
 
