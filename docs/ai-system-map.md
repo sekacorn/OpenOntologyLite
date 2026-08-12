@@ -45,7 +45,9 @@ openontology ai-map report examples/ai_system_map/customer_support_ai.yaml `
 
 The report includes data, model, tool, deployment, and handling boundaries in addition to the
 system summary, tasks, routes, review, audit, cost, integrations, warnings, limitations, and
-canonical SHA-256 digest. No generation timestamp is added.
+canonical SHA-256 digest. No generation timestamp is added. The digest identifies canonical
+map content only. It is not a signature, provenance record, endorsement, or evidence that the
+declared controls exist or operate.
 
 ## Render
 

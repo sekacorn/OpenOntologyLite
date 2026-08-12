@@ -157,6 +157,54 @@ schema_version: "1.0"
     assert ontology_digest(load_ontology(a)) == ontology_digest(load_ontology(b))
 
 
+def test_canonical_digest_ignores_order_of_set_like_declarations() -> None:
+    ontology = load_ontology(EXAMPLES / "customer_support.yaml")
+    action = next(action for action in ontology.actions if action.name == "issue_refund")
+    reordered_action = action.model_copy(
+        update={
+            "aliases": ("refund", "issue_refund_v1"),
+            "permissions": tuple(reversed(action.permissions)),
+            "escalation": ("human_review", "security_review"),
+            "expected_audit_events": ("refund_requested", "refund_decided"),
+            "tags": ("billing", "sensitive"),
+        }
+    )
+    canonical_action = reordered_action.model_copy(
+        update={
+            "aliases": tuple(reversed(reordered_action.aliases)),
+            "permissions": tuple(reversed(reordered_action.permissions)),
+            "escalation": tuple(reversed(reordered_action.escalation)),
+            "expected_audit_events": tuple(reversed(reordered_action.expected_audit_events)),
+            "tags": tuple(reversed(reordered_action.tags)),
+        }
+    )
+    reordered = ontology.model_copy(
+        update={
+            "ontology": ontology.ontology.model_copy(update={"tags": ("billing", "support")}),
+            "actions": tuple(
+                reordered_action if item.name == action.name else item for item in ontology.actions
+            ),
+        }
+    )
+    canonical = ontology.model_copy(
+        update={
+            "ontology": ontology.ontology.model_copy(update={"tags": ("support", "billing")}),
+            "actions": tuple(
+                canonical_action if item.name == action.name else item for item in ontology.actions
+            ),
+        }
+    )
+    assert canonical_json(reordered) == canonical_json(canonical)
+    assert ontology_digest(reordered) == ontology_digest(canonical)
+
+
+def test_canonical_digest_preserves_free_form_metadata_order() -> None:
+    ontology = load_ontology(EXAMPLES / "customer_support.yaml")
+    first = ontology.model_copy(update={"metadata": {"tags": ["first", "second"]}})
+    second = ontology.model_copy(update={"metadata": {"tags": ["second", "first"]}})
+    assert ontology_digest(first) != ontology_digest(second)
+
+
 def test_exports_are_deterministic() -> None:
     ontology = load_ontology(EXAMPLES / "customer_support.yaml")
     outputs = [
@@ -306,7 +354,7 @@ def test_cli_acceptance_commands(tmp_path: Path) -> None:
 def test_cli_json_modes_and_version() -> None:
     example = str(EXAMPLES / "customer_support.yaml")
     assert runner.invoke(app, ["--version"]).exit_code == 0
-    assert runner.invoke(app, ["version"]).output.strip() == "0.1.0a4"
+    assert runner.invoke(app, ["version"]).output.strip() == "0.2.0b1"
     assert '"ok": true' in runner.invoke(app, ["validate", example, "--json"]).output
     assert "canonical_digest" in runner.invoke(app, ["inspect", example, "--json"]).output
     assert runner.invoke(app, ["cycles", example, "--json"]).exit_code == 0

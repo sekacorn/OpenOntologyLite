@@ -13,7 +13,12 @@ AI System Maps, workload risk and routing validation, Markdown reports, Mermaid 
 Runtime entity and action contract validation, neutral ecosystem handoff contracts, action JSON
 Schemas, detailed migration plans, expanded AI System Maps, and safe local module foundations.
 
-## Next Alpha
+## 0.2.0b1 Beta Candidate
+
+Canonical digest handling for explicitly set-like declarations, clearer digest boundaries, and
+Beta-readiness verification across supported Python versions.
+
+## Deferred After Beta
 
 Additional adapters, configurable resource-limit profiles, and broader module composition.
 

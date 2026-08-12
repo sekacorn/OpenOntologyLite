@@ -16,3 +16,11 @@ are never executed. Permissions are named declarations with optional risk, tags,
 The optional top-level `imports` list declares local module paths, namespace expectations,
 version constraints, and digest locks. Import resolution is explicit through
 `resolve_local_modules`; ordinary `load_ontology` does not read imported files.
+
+## Canonical Digests
+
+The canonical SHA-256 digest identifies the normalized ontology content. It is useful for
+reproducibility and local import locks, including formatter-only reordering of set-like
+declarations such as aliases, permission requirements, tags, escalation expectations, and
+expected audit events. It is not a signature and does not establish authorship, provenance,
+trust, factual accuracy, or real-world enforcement.

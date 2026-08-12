@@ -52,7 +52,27 @@ def test_ai_map_digest_and_outputs_are_deterministic() -> None:
         ai_system_map_mermaid(ai_map),
     )
     assert "## Reproducibility" in outputs[1]
+    assert "not a signature" in outputs[1]
     assert "flowchart TD" in outputs[2]
+
+
+def test_ai_map_digest_ignores_order_of_routes_and_escalations() -> None:
+    ai_map = load_ai_system_map(EXAMPLE)
+    task = ai_map.tasks[0]
+    reordered = ai_map.model_copy(
+        update={
+            "tasks": (
+                task.model_copy(
+                    update={
+                        "allowed_routes": tuple(reversed(task.allowed_routes)),
+                        "escalation": tuple(reversed(task.escalation)),
+                    }
+                ),
+                *ai_map.tasks[1:],
+            )
+        }
+    )
+    assert ai_system_map_digest(ai_map) == ai_system_map_digest(reordered)
 
 
 def test_missing_task_name_fails_validation() -> None:

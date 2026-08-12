@@ -225,6 +225,8 @@ def ai_system_map_report(
             f"- Schema version: {markdown(ai_map.schema_version)}",
             f"- OpenOntologyLite version: {markdown(__version__)}",
             f"- Canonical SHA-256: {ai_system_map_digest(ai_map)}",
+            "- The digest identifies canonical map content only; it is not a signature, "
+            "endorsement, proof of provenance, or evidence that declared controls operate.",
         ]
     )
     if source is not None:

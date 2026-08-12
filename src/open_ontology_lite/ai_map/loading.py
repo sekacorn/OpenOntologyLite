@@ -12,6 +12,8 @@ from open_ontology_lite.ai_map.models import AISystemMap
 from open_ontology_lite.errors import OntologyParseError
 from open_ontology_lite.loading.loader import load_raw, validation_error_message
 
+_UNORDERED_TASK_FIELDS = frozenset({"allowed_routes", "escalation"})
+
 
 def load_ai_system_map(path: str | Path) -> AISystemMap:
     """Load an AI System Map from bounded YAML or JSON input."""
@@ -29,6 +31,9 @@ def canonical_ai_system_map_json(ai_map: AISystemMap) -> str:
     """Return stable JSON suitable for hashing and reproducibility checks."""
 
     data = ai_map.model_dump(mode="json")
+    for task in data["tasks"]:
+        for field in _UNORDERED_TASK_FIELDS:
+            task[field] = sorted(task[field])
     for key in ("entities", "tasks", "model_routes", "escalation_paths", "integrations"):
         sort_key = "tool" if key == "integrations" else "name"
         data[key] = sorted(data[key], key=lambda item: item[sort_key].casefold())

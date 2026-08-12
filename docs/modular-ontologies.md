@@ -17,6 +17,6 @@ filesystem boundary, follow symbolic links, execute code, or exceed graph limits
 duplicate namespaces, conflicting declarations, unsupported version expressions, and digest
 mismatches fail closed.
 
-For this alpha, every imported file must be semantically valid on its own. Cross-module
+For this Beta candidate, every imported file must be semantically valid on its own. Cross-module
 references and module-level override rules are deferred; the resolver composes independent
 modules and reports provenance without acting as a dependency registry.

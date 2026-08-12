@@ -11,6 +11,16 @@ from typing import Any, cast
 from open_ontology_lite.errors import UnsafeInputError
 from open_ontology_lite.models import Ontology
 
+_UNORDERED_DECLARATION_FIELDS = frozenset(
+    {
+        "aliases",
+        "expected_audit_events",
+        "escalation",
+        "permissions",
+        "tags",
+    }
+)
+
 
 def _stable(value: Any) -> Any:
     # Decimal is stringified so canonical JSON does not depend on float
@@ -27,6 +37,31 @@ def _stable(value: Any) -> Any:
         if not all(isinstance(key, str) for key in value):
             raise UnsafeInputError("Canonical mappings require string keys.")
         return {key: _stable(value[key]) for key in sorted(value)}
+    return value
+
+
+def _canonical_declarations(value: Any, *, metadata: bool = False) -> Any:
+    """Normalize declaration fields that have set-like contract semantics.
+
+    Their source order does not affect validation, action-contract checks, or
+    generated neutral contracts. Keeping their order out of the digest makes
+    locks reproducible across formatter-only rewrites without changing ordered
+    values such as enum alternatives and declarative preconditions.
+    """
+
+    if isinstance(value, dict):
+        normalized = {
+            key: _canonical_declarations(item, metadata=metadata or key == "metadata")
+            for key, item in value.items()
+        }
+        if not metadata:
+            for key in _UNORDERED_DECLARATION_FIELDS:
+                item = normalized.get(key)
+                if isinstance(item, list) and all(isinstance(entry, str) for entry in item):
+                    normalized[key] = sorted(item)
+        return normalized
+    if isinstance(value, list):
+        return [_canonical_declarations(item, metadata=metadata) for item in value]
     return value
 
 
@@ -62,7 +97,7 @@ def normalize_ontology(ontology: Ontology) -> dict[str, Any]:
     data["permissions"] = {
         name: _stable(data["permissions"][name]) for name in sorted(data.get("permissions", {}))
     }
-    return cast(dict[str, Any], _stable(data))
+    return cast(dict[str, Any], _canonical_declarations(_stable(data)))
 
 
 def canonical_json(ontology: Ontology) -> str:
