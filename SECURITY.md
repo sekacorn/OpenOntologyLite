@@ -4,15 +4,14 @@ OpenOntologyLite treats ontology files as untrusted input.
 
 ## Supported Version
 
-`0.2.0b1` is the first Beta release candidate. Security reports are welcome for the current
-Beta line.
+`0.2.0b2` is the current Beta release. Security reports are welcome for the current Beta line.
 
 ## Threat Model
 
 | Threat | Risk | Mitigation | Remaining limitation |
 |---|---|---|---|
 | Malicious YAML payload | Object construction, ambiguity, or code execution | Uses a `SafeLoader` subclass and rejects duplicate keys | Parser bugs remain possible |
-| Oversized ontology file | Memory or CPU denial of service | Bounded reads plus file-size, parsed-node, nesting, and retained-issue limits | Limits are fixed in this Beta candidate |
+| Oversized ontology file | Memory or CPU denial of service | Bounded reads plus file-size, parsed-node, nesting, and retained-issue limits | Limits are fixed in this Beta release |
 | Recursive reference graph | Infinite recursion | Iterative-safe graph traversal and cycle reporting | Cycles may still confuse downstream tools |
 | Terminal escape injection | Misleading CLI output | Control characters are stripped from human-readable diagnostics | Terminal-specific rendering varies |
 | Mermaid injection | Diagram corruption | CLI exports validate before rendering and labels are escaped | Mermaid parser behavior may change |

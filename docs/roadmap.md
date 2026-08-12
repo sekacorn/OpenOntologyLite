@@ -13,10 +13,11 @@ AI System Maps, workload risk and routing validation, Markdown reports, Mermaid 
 Runtime entity and action contract validation, neutral ecosystem handoff contracts, action JSON
 Schemas, detailed migration plans, expanded AI System Maps, and safe local module foundations.
 
-## 0.2.0b1 Beta Candidate
+## 0.2.0b2 Beta Release
 
 Canonical digest handling for explicitly set-like declarations, clearer digest boundaries, and
-Beta-readiness verification across supported Python versions.
+Beta verification across supported Python versions. The immutable `v0.2.0b1` tag was not
+published because its older publisher action rejected Core Metadata 2.5 before upload.
 
 ## Deferred After Beta
 

@@ -6,13 +6,13 @@ across models, agents, databases, and vendors.
 
 ## Status
 
-Current candidate: `0.2.0b1`, the first Beta release candidate with documented limitations.
+Current release: `0.2.0b2`, the first published Beta release with documented limitations.
 
-## Beta Candidate Notice
+## Beta Notice
 
-OpenOntologyLite is `0.2.0b1` Beta-candidate software. It provides deterministic validation
-and contract transformation, but remains under active compatibility review. It does not execute
-actions, enforce authorization, or perform general-purpose inference.
+OpenOntologyLite is `0.2.0b2` Beta software. It provides deterministic validation and contract
+transformation, but remains under active compatibility review. It does not execute actions,
+enforce authorization, or perform general-purpose inference.
 
 ## Why It Exists
 
@@ -201,12 +201,14 @@ remote imports or schema references, execute expressions, or run shell commands.
 
 ## Roadmap
 
-Current Beta candidate, `0.2.0b1`:
+Current Beta release, `0.2.0b2`:
 
 - Added runtime entity and action validation, neutral ecosystem contracts, action schemas, and
   deterministic migration planning.
 - Expanded AI System Maps and added safe local module foundations with provenance.
 - Normalized canonical ordering for explicitly set-like declarations and clarified digest limits.
+- Recovered Trusted Publishing with the Core Metadata 2.5-compatible publisher action, without
+  product feature expansion.
 
 After Beta:
 
