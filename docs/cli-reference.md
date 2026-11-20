@@ -8,6 +8,7 @@ Commands:
 - `openontology digest <file>`
 - `openontology cycles <file>`
 - `openontology export-json-schema <file>`
+- `openontology export-json-ld <file>`
 - `openontology export-mermaid <file>`
 - `openontology docs <file>`
 - `openontology diff <old-file> <new-file>`

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Aligned the YAML loader cleanup call with current PyYAML type annotations.
+- Added a deterministic, lossless OpenOntologyLite JSON-LD export and round-trip loader.
+
 ## 0.2.0b2 - 2026-08-12
 
 ### Changed

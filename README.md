@@ -27,7 +27,7 @@ Organizations increasingly describe their work inside AI systems, agent framewor
 - Structural and semantic validation with stable machine-readable codes.
 - Deterministic canonical JSON and SHA-256 digest generation.
 - Cycle analysis for relationships and reference properties.
-- JSON Schema 2020-12, Mermaid, Markdown documentation, inspection, and diff exports.
+- Lossless OpenOntologyLite JSON-LD, JSON Schema 2020-12, Mermaid, Markdown documentation, inspection, and diff exports.
 - Typed AI System Maps for workload risk, model routes, review, escalation, audit, and cost expectations.
 - Deterministic migration plans and bounded local-only ontology modules.
 - Local-first operation with no telemetry, network calls, database, server, cloud account, or AI model requirement.
@@ -51,6 +51,7 @@ openontology validate examples/customer_support.yaml
 openontology inspect examples/customer_support.yaml
 openontology digest examples/customer_support.yaml
 openontology export-json-schema examples/customer_support.yaml --output build/customer-support.schema.json
+openontology export-json-ld examples/customer_support.yaml --output build/customer-support.jsonld
 openontology export-mermaid examples/customer_support.yaml --output build/customer-support.mmd
 openontology docs examples/customer_support.yaml --output build/customer-support.md
 openontology entity validate examples/customer_support.yaml Customer examples/data/customer.json --json
@@ -58,6 +59,8 @@ openontology action check examples/customer_support.yaml create_ticket examples/
 openontology contract tool examples/customer_support.yaml create_ticket
 openontology migration-plan old.yaml new.yaml --format markdown
 ```
+
+The JSON-LD export is a lossless OpenOntologyLite transfer envelope aligned with JSON-LD 1.1 syntax. Loading it through `load_json_ld` preserves the canonical ontology digest. It does not claim full RDF or OWL interoperability.
 
 AI workload mapping:
 
