@@ -4,7 +4,7 @@ OpenOntologyLite treats ontology files as untrusted input.
 
 ## Supported Version
 
-`0.2.0b2` is the current Beta release. Security reports are welcome for the current Beta line.
+`0.2.0b3` is the current Beta release. Security reports are welcome for the current Beta line.
 
 ## Threat Model
 

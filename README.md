@@ -6,11 +6,11 @@ across models, agents, databases, and vendors.
 
 ## Status
 
-Current release: `0.2.0b2`, the first published Beta release with documented limitations.
+Current release: `0.2.0b3`, a Beta release with documented limitations.
 
 ## Beta Notice
 
-OpenOntologyLite is `0.2.0b2` Beta software. It provides deterministic validation and contract
+OpenOntologyLite is `0.2.0b3` Beta software. It provides deterministic validation and contract
 transformation, but remains under active compatibility review. It does not execute actions,
 enforce authorization, or perform general-purpose inference.
 
@@ -204,7 +204,13 @@ remote imports or schema references, execute expressions, or run shell commands.
 
 ## Roadmap
 
-Current Beta release, `0.2.0b2`:
+Current Beta release, `0.2.0b3`:
+
+- Added a deterministic, lossless JSON-LD export (OpenOntologyLite envelope) and its round-trip
+  loader. The envelope is aligned with JSON-LD 1.1 syntax and preserves the canonical ontology
+  digest. It does not claim general RDF, OWL, or SPARQL interoperability.
+
+Earlier in the `0.2.0b` Beta line:
 
 - Added runtime entity and action validation, neutral ecosystem contracts, action schemas, and
   deterministic migration planning.

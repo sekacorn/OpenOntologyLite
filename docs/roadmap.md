@@ -13,6 +13,12 @@ AI System Maps, workload risk and routing validation, Markdown reports, Mermaid 
 Runtime entity and action contract validation, neutral ecosystem handoff contracts, action JSON
 Schemas, detailed migration plans, expanded AI System Maps, and safe local module foundations.
 
+## 0.2.0b3 Beta Release
+
+A deterministic, lossless JSON-LD export (OpenOntologyLite envelope) and round-trip loader
+that preserves the canonical ontology digest. Aligned with JSON-LD 1.1 syntax; no general RDF,
+OWL, or SPARQL interoperability is claimed.
+
 ## 0.2.0b2 Beta Release
 
 Canonical digest handling for explicitly set-like declarations, clearer digest boundaries, and
