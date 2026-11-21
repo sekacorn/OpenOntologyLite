@@ -6,11 +6,11 @@ across models, agents, databases, and vendors.
 
 ## Status
 
-Current release: `0.2.0b2`, the first published Beta release with documented limitations.
+Current release: `0.2.0b3`, a Beta release with documented limitations.
 
 ## Beta Notice
 
-OpenOntologyLite is `0.2.0b2` Beta software. It provides deterministic validation and contract
+OpenOntologyLite is `0.2.0b3` Beta software. It provides deterministic validation and contract
 transformation, but remains under active compatibility review. It does not execute actions,
 enforce authorization, or perform general-purpose inference.
 
@@ -27,7 +27,7 @@ Organizations increasingly describe their work inside AI systems, agent framewor
 - Structural and semantic validation with stable machine-readable codes.
 - Deterministic canonical JSON and SHA-256 digest generation.
 - Cycle analysis for relationships and reference properties.
-- JSON Schema 2020-12, Mermaid, Markdown documentation, inspection, and diff exports.
+- Lossless OpenOntologyLite JSON-LD, JSON Schema 2020-12, Mermaid, Markdown documentation, inspection, and diff exports.
 - Typed AI System Maps for workload risk, model routes, review, escalation, audit, and cost expectations.
 - Deterministic migration plans and bounded local-only ontology modules.
 - Local-first operation with no telemetry, network calls, database, server, cloud account, or AI model requirement.
@@ -51,6 +51,7 @@ openontology validate examples/customer_support.yaml
 openontology inspect examples/customer_support.yaml
 openontology digest examples/customer_support.yaml
 openontology export-json-schema examples/customer_support.yaml --output build/customer-support.schema.json
+openontology export-json-ld examples/customer_support.yaml --output build/customer-support.jsonld
 openontology export-mermaid examples/customer_support.yaml --output build/customer-support.mmd
 openontology docs examples/customer_support.yaml --output build/customer-support.md
 openontology entity validate examples/customer_support.yaml Customer examples/data/customer.json --json
@@ -58,6 +59,8 @@ openontology action check examples/customer_support.yaml create_ticket examples/
 openontology contract tool examples/customer_support.yaml create_ticket
 openontology migration-plan old.yaml new.yaml --format markdown
 ```
+
+The JSON-LD export is a lossless OpenOntologyLite transfer envelope aligned with JSON-LD 1.1 syntax. Loading it through `load_json_ld` preserves the canonical ontology digest. It does not claim full RDF or OWL interoperability.
 
 AI workload mapping:
 
@@ -201,7 +204,13 @@ remote imports or schema references, execute expressions, or run shell commands.
 
 ## Roadmap
 
-Current Beta release, `0.2.0b2`:
+Current Beta release, `0.2.0b3`:
+
+- Added a deterministic, lossless JSON-LD export (OpenOntologyLite envelope) and its round-trip
+  loader. The envelope is aligned with JSON-LD 1.1 syntax and preserves the canonical ontology
+  digest. It does not claim general RDF, OWL, or SPARQL interoperability.
+
+Earlier in the `0.2.0b` Beta line:
 
 - Added runtime entity and action validation, neutral ecosystem contracts, action schemas, and
   deterministic migration planning.

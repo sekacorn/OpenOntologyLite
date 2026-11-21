@@ -154,7 +154,7 @@ def _load_unique_yaml(text: str) -> object:
     try:
         return loader.get_single_data()
     finally:
-        loader.dispose()  # type: ignore[no-untyped-call]
+        getattr(loader, "dispose")()  # noqa: B009 - works across PyYAML stub versions
 
 
 def load_value(path: str | Path) -> Any:
@@ -171,7 +171,7 @@ def load_value(path: str | Path) -> Any:
     try:
         if suffix in {".yaml", ".yml"}:
             loaded = _load_unique_yaml(text)
-        elif suffix == ".json":
+        elif suffix in {".json", ".jsonld"}:
             loaded = json.loads(
                 text,
                 object_pairs_hook=_unique_json_object,

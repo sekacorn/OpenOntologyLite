@@ -1,3 +1,4 @@
+from importlib.resources import files
 from pathlib import Path
 
 import pytest
@@ -6,6 +7,8 @@ from typer.testing import CliRunner
 from open_ontology_lite import (
     diff_ontologies,
     inspect_ontology,
+    json_ld_text,
+    load_json_ld,
     load_ontology,
     normalize_ontology,
     ontology_digest,
@@ -34,6 +37,26 @@ def test_valid_examples_load_and_validate() -> None:
         report = validate_ontology(ontology)
         assert report.ok, path
         assert inspect_ontology(ontology).entity_count >= 5
+
+
+def test_json_ld_round_trip_preserves_canonical_ontology(tmp_path: Path) -> None:
+    source = load_ontology(EXAMPLES / "customer_support.yaml")
+    exported = tmp_path / "customer_support.jsonld"
+    exported.write_text(json_ld_text(source), encoding="utf-8")
+    restored = load_json_ld(exported)
+    assert ontology_digest(restored) == ontology_digest(source)
+    assert json_ld_text(restored) == exported.read_text(encoding="utf-8")
+
+
+def test_json_ld_cli_round_trip(tmp_path: Path) -> None:
+    exported = tmp_path / "customer_support.jsonld"
+    result = runner.invoke(
+        app,
+        ["export-json-ld", str(EXAMPLES / "customer_support.yaml"), "--output", str(exported)],
+    )
+    assert result.exit_code == 0, result.exception
+    assert load_json_ld(exported).ontology.id == "customer-service"
+    assert files("open_ontology_lite").joinpath("schemas/json-ld-v1.schema.json").is_file()
 
 
 @pytest.mark.parametrize(
@@ -354,7 +377,7 @@ def test_cli_acceptance_commands(tmp_path: Path) -> None:
 def test_cli_json_modes_and_version() -> None:
     example = str(EXAMPLES / "customer_support.yaml")
     assert runner.invoke(app, ["--version"]).exit_code == 0
-    assert runner.invoke(app, ["version"]).output.strip() == "0.2.0b2"
+    assert runner.invoke(app, ["version"]).output.strip() == "0.2.0b3"
     assert '"ok": true' in runner.invoke(app, ["validate", example, "--json"]).output
     assert "canonical_digest" in runner.invoke(app, ["inspect", example, "--json"]).output
     assert runner.invoke(app, ["cycles", example, "--json"]).exit_code == 0
