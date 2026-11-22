@@ -7,6 +7,17 @@ on:
       # names like "vendor-audit", which would start a run that can only fail
       # the tag/version check.
       - "v[0-9]*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to run against (for example v0.2.0b3)"
+        required: true
+        type: string
+      dry_run:
+        description: "Run every check but skip the PyPI upload"
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -17,7 +28,22 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
+      - name: Report the release mode
+        env:
+          EVENT: ${{ github.event_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          echo "event_name     = ${EVENT}"
+          echo "inputs.dry_run = '${DRY_RUN}'"
+          if [ "${EVENT}" != "push" ] && [ "${DRY_RUN}" != "false" ]; then
+            echo "mode           = DRY RUN (the PyPI upload and everything after it will be skipped)"
+          else
+            echo "mode           = REAL RELEASE (the PyPI upload will run)"
+          fi
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
@@ -37,17 +63,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
       - name: Validate tag matches package version
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
         run: |
           python - <<'PY'
           import os
           import pathlib
           import tomllib
 
-          tag = os.environ["GITHUB_REF_NAME"]
+          tag = os.environ["RELEASE_TAG"]
           version = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
           expected_tag = f"v{version}"
           if tag != expected_tag:
@@ -92,6 +122,9 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
+    # Skipped on a dry run. `inputs.dry_run` is empty on a push event,
+    # so the event check comes first: a push is always a real release.
+    if: ${{ github.event_name == 'push' || inputs.dry_run == false }}
     environment: pypi
     permissions:
       id-token: write
@@ -102,4 +135,15 @@ jobs:
           name: python-package-distributions
           path: dist/
       # v1.14.2 supports Core Metadata 2.5; v1.14.0 blocked this release before upload.
+      - name: Refuse to upload during a dry run
+        env:
+          EVENT: ${{ github.event_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "${EVENT}" != "push" ] && [ "${DRY_RUN}" != "false" ]; then
+            echo "This job must not run during a dry run. Failing instead of uploading."
+            exit 1
+          fi
+          echo "Confirmed a real release: event=${EVENT} dry_run='${DRY_RUN}'"
+
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
