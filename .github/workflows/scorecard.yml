@@ -6,6 +6,10 @@ on:
     - cron: "31 3 * * 2"
   push:
     branches: [main]
+  # So the scan can be run on demand. Without this the only ways to trigger
+  # it are the weekly cron, a push to the default branch, or a branch
+  # protection change, which makes a fix impossible to verify promptly.
+  workflow_dispatch:
 
 permissions:
   contents: read
