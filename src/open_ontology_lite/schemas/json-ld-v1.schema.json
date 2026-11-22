@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/sekacorn/OpenOntologyLite/schemas/json-ld-v1.schema.json",
+  "title": "OpenOntologyLite JSON-LD v1",
+  "type": "object",
+  "properties": {
+    "@context": {"type": "object"},
+    "@type": {"const": "OntologyDocument"},
+    "format_version": {"const": "openontologylite.jsonld.v1"},
+    "ontology": {"type": "object"}
+  },
+  "required": ["@context", "@type", "format_version", "ontology"],
+  "additionalProperties": false
+}

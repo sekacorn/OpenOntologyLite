@@ -32,7 +32,13 @@ from open_ontology_lite.contracts import (
     generate_tool_contract,
 )
 from open_ontology_lite.diffing import diff_ontologies
-from open_ontology_lite.exporters import action_input_schema, action_output_schema
+from open_ontology_lite.exporters import (
+    action_input_schema,
+    action_output_schema,
+    json_ld_text,
+    load_json_ld,
+    ontology_from_json_ld,
+)
 from open_ontology_lite.inspection import inspect_ontology
 from open_ontology_lite.loading import load_ontology
 from open_ontology_lite.migrations import MigrationPlan, build_migration_plan
@@ -92,11 +98,14 @@ __all__ = [
     "generate_rag_metadata",
     "generate_tool_contract",
     "inspect_ontology",
+    "json_ld_text",
     "load",
     "load_ai_system_map",
+    "load_json_ld",
     "load_ontology",
     "normalize_ontology",
     "ontology_digest",
+    "ontology_from_json_ld",
     "resolve_local_modules",
     "validate_ai_system_map",
     "validate_entity_instance",

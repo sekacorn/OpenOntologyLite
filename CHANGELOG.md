@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+## 0.2.0b3 - 2026-11-21
+
+### Added
+
+- A deterministic, lossless JSON-LD export (OpenOntologyLite envelope) and its round-trip
+  loader: `json_ld_text`, `load_json_ld`, and `ontology_from_json_ld`. A round trip preserves
+  `ontology_digest`. The envelope is aligned with JSON-LD 1.1 syntax and is a transfer document
+  for OpenOntologyLite; it does not claim general RDF, OWL, or SPARQL interoperability.
+
+### Changed
+
+- Aligned the YAML loader cleanup call with current PyYAML type annotations.
+
 ## 0.2.0b2 - 2026-08-12
 
 ### Changed

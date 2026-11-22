@@ -19,7 +19,7 @@ from open_ontology_lite.ai_map import (
 from open_ontology_lite.contracts import generate_tool_contract
 from open_ontology_lite.diffing import diff_ontologies, diff_text
 from open_ontology_lite.errors import OpenOntologyLiteError
-from open_ontology_lite.exporters import json_schema_text, markdown_docs, mermaid_text
+from open_ontology_lite.exporters import json_ld_text, json_schema_text, markdown_docs, mermaid_text
 from open_ontology_lite.exporters.escaping import plain
 from open_ontology_lite.inspection import inspect_ontology
 from open_ontology_lite.loading import load_ontology, load_raw, load_value
@@ -497,6 +497,23 @@ def export_json_schema(
         typer.echo(f"Unknown entity: {plain(entity)}", err=True)
         raise typer.Exit(2)
     _write(json_schema_text(ontology, entity), output, sources=(file,))
+
+
+@app.command("export-json-ld")
+def export_json_ld(
+    file: Path,
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Write output to a .jsonld file.")
+    ] = None,
+    debug: Annotated[
+        bool, typer.Option("--debug", help="Show stack traces for maintainers.")
+    ] = False,
+) -> None:
+    """Export lossless deterministic OpenOntologyLite JSON-LD."""
+
+    ontology = _load(file, debug)
+    _require_valid(ontology)
+    _write(json_ld_text(ontology), output, sources=(file,))
 
 
 @app.command("export-mermaid")

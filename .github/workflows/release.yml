@@ -3,7 +3,10 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
+      # Only version tags start a release. A bare "v" prefix would also match
+      # names like "vendor-audit", which would start a run that can only fail
+      # the tag/version check.
+      - "v[0-9]*"
 
 permissions:
   contents: read
