@@ -32,9 +32,12 @@ OpenOntologyLite treats ontology files as untrusted input.
 
 ## Reporting
 
-Report vulnerabilities through the repository's
-[private vulnerability reporting form](https://github.com/sekacorn/OpenOntologyLite/security/advisories/new).
-If the form is not available, open an issue titled "Security contact request" that contains
-**no details**, and the maintainer will arrange a private channel. No security advisories have
+Report vulnerabilities privately with **Report a vulnerability** on the repository's
+[Security tab](https://github.com/sekacorn/OpenOntologyLite/security) (direct link: [github.com/sekacorn/OpenOntologyLite/security/advisories/new](https://github.com/sekacorn/OpenOntologyLite/security/advisories/new)).
+This is GitHub's private vulnerability reporting: the report stays private between you and the
+maintainers until an advisory is published.
+Please do not open a public issue.
+
+No security advisories have
 been published; all advisories appear at
 [github.com/sekacorn/OpenOntologyLite/security/advisories](https://github.com/sekacorn/OpenOntologyLite/security/advisories).
