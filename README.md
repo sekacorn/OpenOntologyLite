@@ -181,6 +181,10 @@ graph, parsed-node, collection, string, nesting, and diagnostic limits, non-exec
 preconditions, deterministic serialization, and sanitized diagnostics. It does not resolve
 remote imports or schema references, execute expressions, or run shell commands.
 
+**Advisories.** None have been published for `openontologylite`. See [SECURITY.md](SECURITY.md) for the
+threat model and how to report a vulnerability; published advisories appear at
+[github.com/sekacorn/OpenOntologyLite/security/advisories](https://github.com/sekacorn/OpenOntologyLite/security/advisories).
+
 ## Limitations
 
 - No full RDF or OWL compatibility.
